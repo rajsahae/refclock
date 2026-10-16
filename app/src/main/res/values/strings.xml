@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Ref Clock</string>
+    <string name="channel_match">Match in progress</string>
+</resources>

@@ -1,0 +1,6 @@
+<resources>
+    <style name="Theme.RefClock" parent="@android:style/Theme.DeviceDefault">
+        <!-- A sleeve or sweaty hand brushing the screen mustn't dismiss the clock mid-match. -->
+        <item name="android:windowSwipeToDismiss">false</item>
+    </style>
+</resources>
