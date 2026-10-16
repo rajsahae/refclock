@@ -1,6 +1,7 @@
 package com.refclock.ui
 
 import android.os.SystemClock
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.core.RepeatMode
@@ -49,6 +50,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.foundation.BasicSwipeToDismissBox
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
+import androidx.wear.compose.foundation.lazy.ScalingLazyListState
 import androidx.wear.compose.foundation.lazy.items
 import androidx.wear.compose.material.Chip
 import androidx.wear.compose.material.ChipDefaults
@@ -56,7 +58,10 @@ import androidx.wear.compose.material.CompactChip
 import androidx.wear.compose.material.Icon
 import androidx.wear.compose.material.ListHeader
 import androidx.wear.compose.material.MaterialTheme
+import androidx.wear.compose.material.Scaffold
 import androidx.wear.compose.material.Text
+import androidx.wear.compose.material.TimeText
+import androidx.wear.compose.material.scrollAway
 import com.refclock.MatchController
 import com.refclock.R
 import com.refclock.match.MatchState
@@ -64,6 +69,7 @@ import com.refclock.match.Phase
 import com.refclock.match.Preset
 import com.refclock.match.Presets
 import com.refclock.match.formatElapsed
+import com.refclock.match.formatLength
 import com.refclock.match.formatRemaining
 import kotlinx.coroutines.delay
 
@@ -77,6 +83,8 @@ fun RefClockApp(ambient: Boolean, ambientTick: Int) {
     val state by MatchController.state.collectAsState()
     val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
     val inHalf = state.phase == Phase.RUNNING || state.phase == Phase.PAUSED
+    var picking by remember { mutableStateOf(false) }
+    val presetListState = remember(picking) { ScalingLazyListState() }
     MaterialTheme {
         // Swipe-right is an ordinary back, except during a half: a brushed sleeve mid-run must not
         // knock the clock off screen. The crown still exits.
@@ -87,11 +95,24 @@ fun RefClockApp(ambient: Boolean, ambientTick: Int) {
             // OLED burn-in: the ambient clock can stay on screen for a whole half, so nudge it each minute.
             val step = with(LocalDensity.current) { 4.dp.roundToPx() }
             val shift = if (ambient) IntOffset((ambientTick % 3 - 1) * step, (ambientTick / 3 % 3 - 1) * step) else IntOffset.Zero
-            Box(
-                Modifier.fillMaxSize().background(Color.Black).offset { shift }.padding(horizontal = 12.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (!isBackground) Screen(state, ambient, ambientTick)
+            Box(Modifier.fillMaxSize().background(Color.Black).offset { shift }) {
+                if (!isBackground) {
+                    // The time slides away as the preset list scrolls instead of overlapping its items.
+                    Scaffold(
+                        timeText = { TimeText(if (picking) Modifier.scrollAway(presetListState) else Modifier) },
+                    ) {
+                        Box(
+                            Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (state.phase == Phase.IDLE) {
+                                IdleScreen(state, picking, { picking = it }, presetListState)
+                            } else {
+                                Screen(state, ambient, ambientTick)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -100,7 +121,7 @@ fun RefClockApp(ambient: Boolean, ambientTick: Int) {
 @Composable
 private fun Screen(state: MatchState, ambient: Boolean, ambientTick: Int) {
     when (state.phase) {
-        Phase.IDLE -> IdleScreen(state)
+        Phase.IDLE -> Unit // Drawn by RefClockApp, which owns the preset picker's state.
         Phase.RUNNING, Phase.PAUSED -> HalfScreen(state, ambient, ambientTick)
         Phase.HALFTIME -> BreakScreen(
             title = "Halftime",
@@ -131,25 +152,34 @@ private fun Screen(state: MatchState, ambient: Boolean, ambientTick: Int) {
 }
 
 @Composable
-private fun IdleScreen(state: MatchState) {
+private fun IdleScreen(
+    state: MatchState,
+    picking: Boolean,
+    setPicking: (Boolean) -> Unit,
+    listState: ScalingLazyListState,
+) {
     val context = LocalContext.current
-    var picking by remember { mutableStateOf(false) }
-    BackHandler(enabled = picking) { picking = false }
+    val presets = rememberMenuPresets()
+    BackHandler(enabled = picking) { setPicking(false) }
     if (picking) {
-        PresetList { preset ->
+        PresetList(presets, listState) { preset ->
             MatchController.selectPreset(context, preset.id)
-            picking = false
+            setPicking(false)
         }
         return
     }
 
-    val preset = Presets.byId(state.presetId)
+    val preset = Presets.byId(state.presetId).takeIf { it in presets } ?: presets.first()
+    // Kick off starts state.presetId, so a last-used preset that's now hidden must be replaced there too.
+    LaunchedEffect(preset.id) {
+        if (preset.id != state.presetId) MatchController.selectPreset(context, preset.id)
+    }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(preset.name, style = MaterialTheme.typography.title2)
-        Text("${formatElapsed(preset.halfLengthMs)} halves", style = MaterialTheme.typography.caption1, color = Dim)
+        Text("${formatLength(preset.halfLengthMs)} halves", style = MaterialTheme.typography.caption1, color = Dim)
         Spacer(Modifier.height(4.dp))
         Chip(
             onClick = { MatchController.kickOff(context) },
@@ -157,7 +187,7 @@ private fun IdleScreen(state: MatchState) {
             colors = ChipDefaults.primaryChipColors(),
         )
         CompactChip(
-            onClick = { picking = true },
+            onClick = { setPicking(true) },
             label = { Text("Change preset") },
             colors = ChipDefaults.secondaryChipColors(),
         )
@@ -165,14 +195,25 @@ private fun IdleScreen(state: MatchState) {
 }
 
 @Composable
-private fun PresetList(onPick: (Preset) -> Unit) {
-    ScalingLazyColumn(Modifier.fillMaxSize()) {
+private fun rememberMenuPresets(): List<Preset> {
+    val context = LocalContext.current
+    return remember {
+        val developer = Settings.Global.getInt(
+            context.contentResolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0,
+        ) != 0
+        Presets.all.filter { developer || !it.devOnly }
+    }
+}
+
+@Composable
+private fun PresetList(presets: List<Preset>, listState: ScalingLazyListState, onPick: (Preset) -> Unit) {
+    ScalingLazyColumn(Modifier.fillMaxSize(), state = listState) {
         item { ListHeader { Text("Presets") } }
-        items(Presets.all) { preset ->
+        items(presets) { preset ->
             Chip(
                 onClick = { onPick(preset) },
                 label = { Text(preset.name) },
-                secondaryLabel = { Text("${formatElapsed(preset.halfLengthMs)} halves") },
+                secondaryLabel = { Text("${formatLength(preset.halfLengthMs)} halves") },
                 colors = ChipDefaults.secondaryChipColors(),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -209,7 +250,7 @@ private fun HalfScreen(state: MatchState, ambient: Boolean, ambientTick: Int) {
         Text(
             clock(elapsed),
             style = Tabular,
-            fontSize = 54.sp,
+            fontSize = 46.sp,
             fontWeight = if (ambient) FontWeight.Light else FontWeight.Medium,
             color = when {
                 ambient -> Color.LightGray
@@ -220,7 +261,7 @@ private fun HalfScreen(state: MatchState, ambient: Boolean, ambientTick: Int) {
         )
         val pending = reached
         when {
-            paused -> Text("Paused", style = MaterialTheme.typography.body2, color = Dim)
+            paused -> Text("Paused", style = MaterialTheme.typography.body1, color = Dim)
             pending != null -> Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -229,18 +270,18 @@ private fun HalfScreen(state: MatchState, ambient: Boolean, ambientTick: Int) {
                 PulsingCheck(animate = !ambient, tint = tint)
                 Text(
                     if (pending.isHalfEnd) overText(state.half) else pending.label,
-                    style = MaterialTheme.typography.body2,
+                    style = MaterialTheme.typography.body1,
                     fontWeight = FontWeight.Bold,
                     color = tint,
                 )
             }
             else -> Text(
                 nextAlertText(preset, state.half, elapsed, ambient),
-                style = MaterialTheme.typography.body2.merge(Tabular),
+                style = MaterialTheme.typography.body1.merge(Tabular),
                 color = if (ambient) Dim else Color.White,
             )
         }
-        Text("Game ${clock(game)}", style = MaterialTheme.typography.caption2.merge(Tabular), color = Dim)
+        Text("Game ${clock(game)}", style = MaterialTheme.typography.caption1.merge(Tabular), color = Dim)
 
         if (!ambient) {
             Spacer(Modifier.height(10.dp))
@@ -282,7 +323,7 @@ private fun PulsingCheck(animate: Boolean, tint: Color) {
         painterResource(R.drawable.ic_check_circle),
         contentDescription = "Reached",
         tint = tint,
-        modifier = Modifier.size(18.dp).alpha(alpha),
+        modifier = Modifier.size(20.dp).alpha(alpha),
     )
 }
 

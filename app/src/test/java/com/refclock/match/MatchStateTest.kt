@@ -67,5 +67,8 @@ class MatchStateTest {
         assertEquals("62:05", formatElapsed(62 * min + 5_000))
         assertEquals("0:01", formatRemaining(1))
         assertEquals("0:00", formatRemaining(0))
+        assertEquals("25m", formatLength(25 * min))
+        assertEquals("30s", formatLength(30_000))
+        assertEquals("27m 30s", formatLength(27 * min + 30_000))
     }
 }

@@ -9,6 +9,8 @@ data class Preset(
     val name: String,
     val halfLengthMs: Long,
     val checkpoints: List<Checkpoint>,
+    /** Listed only while the watch has Developer options turned on. */
+    val devOnly: Boolean = false,
 ) {
     val alerts: List<Alert> =
         (checkpoints.map { Alert(it.atMs, it.label, isHalfEnd = false) } +
@@ -82,6 +84,18 @@ data class MatchState(
         } else this
 
     fun newMatch() = MatchState(presetId = presetId)
+}
+
+/** Compact length for menus, e.g. "25m", "30s" or "27m 30s". */
+fun formatLength(ms: Long): String {
+    val totalSeconds = ms / 1000
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return when {
+        minutes == 0L -> "${seconds}s"
+        seconds == 0L -> "${minutes}m"
+        else -> "${minutes}m ${seconds}s"
+    }
 }
 
 fun formatElapsed(ms: Long): String = formatSeconds(ms.coerceAtLeast(0) / 1000)

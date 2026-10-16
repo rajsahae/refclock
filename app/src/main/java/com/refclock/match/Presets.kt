@@ -7,9 +7,10 @@ object Presets {
         // For feeling the vibration patterns without waiting out a real half.
         Preset(
             id = "test",
-            name = "Test (30 s)",
+            name = "Test",
             halfLengthMs = mmss(0, 30),
             checkpoints = listOf(Checkpoint(mmss(0, 15), "Checkpoint")),
+            devOnly = true,
         ),
     )
 
