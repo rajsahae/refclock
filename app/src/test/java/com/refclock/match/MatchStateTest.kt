@@ -10,6 +10,12 @@ class MatchStateTest {
     private val min = 60_000L
 
     @Test
+    fun quarterBreakLeavesEqualQuartersAroundAOneMinuteWaterBreak() {
+        assertEquals(12 * min, Presets.byId("ayso-10u").checkpoints.single().atMs)
+        assertEquals(14 * min + 30_000, Presets.byId("ayso-12u").checkpoints.single().atMs)
+    }
+
+    @Test
     fun clockRunsFromKickOff() {
         val s = MatchState(presetId = preset.id).kickOff(now = 1_000)
         assertEquals(90_000, s.halfElapsedMs(91_000))
