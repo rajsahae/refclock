@@ -15,7 +15,8 @@ data class Preset(
             Alert(halfLengthMs, "Half ends", isHalfEnd = true))
             .sortedBy { it.atMs }
 
-    fun nextAlert(halfElapsedMs: Long): Alert? = alerts.firstOrNull { it.atMs > halfElapsedMs }}
+    fun nextAlert(halfElapsedMs: Long): Alert? = alerts.firstOrNull { it.atMs > halfElapsedMs }
+}
 
 enum class Phase { IDLE, RUNNING, PAUSED, HALFTIME, FINISHED }
 

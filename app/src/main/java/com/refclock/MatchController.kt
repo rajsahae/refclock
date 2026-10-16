@@ -89,7 +89,9 @@ object MatchController {
             endedHalfMs = prefs.getLong("endedHalfMs", 0),
         )
         // elapsedRealtime() restarts at boot, so a half that was running before a reboot can't be recovered.
-        val rebooted = prefs.getInt("bootCount", bootCount) != bootCount
+        // BOOT_COUNT can read 0 on some builds; a start time in the future is a reboot regardless.
+        val rebooted = prefs.getInt("bootCount", bootCount) != bootCount ||
+            s.halfStartedAt > SystemClock.elapsedRealtime()
         return if (rebooted && (phase == Phase.RUNNING || phase == Phase.PAUSED)) s.newMatch() else s
     }
 }

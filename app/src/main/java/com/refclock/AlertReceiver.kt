@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
 import android.os.Build
+import android.os.SystemClock
 import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -16,15 +17,18 @@ import com.refclock.match.Presets
 class AlertReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val state = MatchController.state.value
-        // Drops an alarm that was already in flight when the half was paused or ended.
+        // Drops an alarm that was already in flight when the half was paused or ended, including one
+        // that lands just after a quick pause/resume, before its checkpoint is due again.
         if (state.phase != Phase.RUNNING || state.half != intent.getIntExtra(EXTRA_HALF, 0)) return
         val alert = Presets.byId(state.presetId).alerts.getOrNull(intent.getIntExtra(EXTRA_ALERT, -1)) ?: return
+        if (state.halfElapsedMs(SystemClock.elapsedRealtime()) < alert.atMs - DUE_SLACK_MS) return
         MatchController.alertFired(context, alert)
     }
 
     companion object {
         const val EXTRA_HALF = "half"
         const val EXTRA_ALERT = "alert"
+        private const val DUE_SLACK_MS = 1000L
     }
 }
 

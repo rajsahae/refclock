@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,11 +39,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.foundation.BasicSwipeToDismissBox
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
@@ -81,8 +84,11 @@ fun RefClockApp(ambient: Boolean, ambientTick: Int) {
             onDismissed = { backDispatcher?.onBackPressed() },
             userSwipeEnabled = !inHalf,
         ) { isBackground ->
+            // OLED burn-in: the ambient clock can stay on screen for a whole half, so nudge it each minute.
+            val step = with(LocalDensity.current) { 4.dp.roundToPx() }
+            val shift = if (ambient) IntOffset((ambientTick % 3 - 1) * step, (ambientTick / 3 % 3 - 1) * step) else IntOffset.Zero
             Box(
-                Modifier.fillMaxSize().background(Color.Black).padding(horizontal = 12.dp),
+                Modifier.fillMaxSize().background(Color.Black).offset { shift }.padding(horizontal = 12.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 if (!isBackground) Screen(state, ambient, ambientTick)
@@ -222,14 +228,14 @@ private fun HalfScreen(state: MatchState, ambient: Boolean, ambientTick: Int) {
                 val tint = if (ambient) Color.LightGray else Reached
                 PulsingCheck(animate = !ambient, tint = tint)
                 Text(
-                    if (pending.isHalfEnd) "Half over" else pending.label,
+                    if (pending.isHalfEnd) overText(state.half) else pending.label,
                     style = MaterialTheme.typography.body2,
                     fontWeight = FontWeight.Bold,
                     color = tint,
                 )
             }
             else -> Text(
-                nextAlertText(preset, elapsed, ambient),
+                nextAlertText(preset, state.half, elapsed, ambient),
                 style = MaterialTheme.typography.body2.merge(Tabular),
                 color = if (ambient) Dim else Color.White,
             )
@@ -248,16 +254,19 @@ private fun HalfScreen(state: MatchState, ambient: Boolean, ambientTick: Int) {
                 } else {
                     HoldButton("Pause") { MatchController.pause(context) }
                 }
-                HoldButton("End half") { MatchController.endHalf(context) }
+                HoldButton(if (state.half == 1) "End half" else "End game") { MatchController.endHalf(context) }
             }
         }
     }
 }
 
-private fun nextAlertText(preset: Preset, elapsed: Long, ambient: Boolean): String {
-    val next = preset.nextAlert(elapsed) ?: return "Half over"
-    return if (ambient) "Next: ${next.label}" else "${next.label} in ${formatRemaining(next.atMs - elapsed)}"
+private fun nextAlertText(preset: Preset, half: Int, elapsed: Long, ambient: Boolean): String {
+    val next = preset.nextAlert(elapsed) ?: return overText(half)
+    val label = if (!next.isHalfEnd) next.label else if (half == 1) "Half ends" else "Game ends"
+    return if (ambient) "Next: $label" else "$label in ${formatRemaining(next.atMs - elapsed)}"
 }
+
+private fun overText(half: Int) = if (half == 1) "Half over" else "Game over"
 
 @Composable
 private fun PulsingCheck(animate: Boolean, tint: Color) {

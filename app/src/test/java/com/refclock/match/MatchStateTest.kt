@@ -46,6 +46,7 @@ class MatchStateTest {
         assertTrue(preset.nextAlert(15 * min)!!.isHalfEnd)
         assertNull(preset.nextAlert(30 * min))
     }
+
     @Test
     fun invalidTransitionsAreNoOps() {
         val idle = MatchState()
