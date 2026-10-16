@@ -42,7 +42,7 @@ object MatchController {
 
     fun alertFired(context: Context, alert: Alert) {
         _pendingAlert.value = alert
-        Haptics.buzzUntilAcknowledged(context, alert)
+        Haptics.buzzUntilAcknowledged(context, alert, _state.value.half)
     }
 
     fun acknowledge(context: Context) {

@@ -29,17 +29,22 @@ class AlertReceiver : BroadcastReceiver() {
 }
 
 object Haptics {
-    private val CHECKPOINT = longArrayOf(0, 500, 250, 500, 250, 500)
+    private val CHECKPOINT = longArrayOf(0, 150, 250, 150, 250, 150, 250, 150)
 
-    // Long-then-short so it can't be mistaken for a checkpoint while running.
-    private val HALF_END = longArrayOf(0, 1200, 300, 200, 150, 200, 150, 200)
+    // Long pulses, like the referee's whistle: two at half time, three at full time.
+    private val HALF_TIME = longArrayOf(0, 800, 300, 800)
+    private val FULL_TIME = longArrayOf(0, 800, 300, 800, 300, 800)
 
     // Repeats until acknowledged, but capped at about a minute so an unnoticed alert can't buzz all half.
     private const val GAP_MS = 3000L
     private const val REPEATS = 12
 
-    fun buzzUntilAcknowledged(context: Context, alert: Alert) {
-        val pattern = if (alert.isHalfEnd) HALF_END else CHECKPOINT
+    fun buzzUntilAcknowledged(context: Context, alert: Alert, half: Int) {
+        val pattern = when {
+            !alert.isHalfEnd -> CHECKPOINT
+            half == 1 -> HALF_TIME
+            else -> FULL_TIME
+        }
         // Each repeat starts with an "off" segment, so even indices stay off and odd ones on.
         val timings = (0 until REPEATS).flatMap { i ->
             listOf(if (i == 0) 0L else GAP_MS) + pattern.drop(1)

@@ -1,7 +1,8 @@
 package com.refclock.ui
 
 import android.os.SystemClock
-import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -43,6 +44,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.wear.compose.foundation.BasicSwipeToDismissBox
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.items
 import androidx.wear.compose.material.Chip
@@ -70,40 +72,54 @@ private val Tabular = TextStyle(fontFeatureSettings = "tnum")
 @Composable
 fun RefClockApp(ambient: Boolean, ambientTick: Int) {
     val state by MatchController.state.collectAsState()
+    val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+    val inHalf = state.phase == Phase.RUNNING || state.phase == Phase.PAUSED
     MaterialTheme {
-        Box(
-            Modifier.fillMaxSize().background(Color.Black).padding(horizontal = 12.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            when (state.phase) {
-                Phase.IDLE -> IdleScreen(state)
-                Phase.RUNNING, Phase.PAUSED -> HalfScreen(state, ambient, ambientTick)
-                Phase.HALFTIME -> BreakScreen(
-                    title = "Halftime",
-                    summary = "1st half ${formatElapsed(state.endedHalfMs)}",
-                    ambient = ambient,
-                ) {
-                    val context = LocalContext.current
-                    Chip(
-                        onClick = { MatchController.startSecondHalf(context) },
-                        label = { Text("Start 2nd half") },
-                        colors = ChipDefaults.primaryChipColors(),
-                    )
-                    HoldButton("End match") { MatchController.newMatch(context) }
-                }
-                Phase.FINISHED -> BreakScreen(
-                    title = "Full time",
-                    summary = "2nd half ${formatElapsed(state.endedHalfMs)}",
-                    ambient = ambient,
-                ) {
-                    val context = LocalContext.current
-                    Chip(
-                        onClick = { MatchController.newMatch(context) },
-                        label = { Text("New match") },
-                        colors = ChipDefaults.primaryChipColors(),
-                    )
-                }
+        // Swipe-right is an ordinary back, except during a half: a brushed sleeve mid-run must not
+        // knock the clock off screen. The crown still exits.
+        BasicSwipeToDismissBox(
+            onDismissed = { backDispatcher?.onBackPressed() },
+            userSwipeEnabled = !inHalf,
+        ) { isBackground ->
+            Box(
+                Modifier.fillMaxSize().background(Color.Black).padding(horizontal = 12.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (!isBackground) Screen(state, ambient, ambientTick)
             }
+        }
+    }
+}
+
+@Composable
+private fun Screen(state: MatchState, ambient: Boolean, ambientTick: Int) {
+    when (state.phase) {
+        Phase.IDLE -> IdleScreen(state)
+        Phase.RUNNING, Phase.PAUSED -> HalfScreen(state, ambient, ambientTick)
+        Phase.HALFTIME -> BreakScreen(
+            title = "Halftime",
+            summary = "1st half ${formatElapsed(state.endedHalfMs)}",
+            ambient = ambient,
+        ) {
+            val context = LocalContext.current
+            Chip(
+                onClick = { MatchController.startSecondHalf(context) },
+                label = { Text("Start 2nd half") },
+                colors = ChipDefaults.primaryChipColors(),
+            )
+            HoldButton("End match") { MatchController.newMatch(context) }
+        }
+        Phase.FINISHED -> BreakScreen(
+            title = "Full time",
+            summary = "2nd half ${formatElapsed(state.endedHalfMs)}",
+            ambient = ambient,
+        ) {
+            val context = LocalContext.current
+            Chip(
+                onClick = { MatchController.newMatch(context) },
+                label = { Text("New match") },
+                colors = ChipDefaults.primaryChipColors(),
+            )
         }
     }
 }
@@ -112,6 +128,7 @@ fun RefClockApp(ambient: Boolean, ambientTick: Int) {
 private fun IdleScreen(state: MatchState) {
     val context = LocalContext.current
     var picking by remember { mutableStateOf(false) }
+    BackHandler(enabled = picking) { picking = false }
     if (picking) {
         PresetList { preset ->
             MatchController.selectPreset(context, preset.id)
@@ -294,27 +311,38 @@ private fun BreakScreen(
     }
 }
 
-/** Hold, not tap: a stray touch mid-run must never stop or end the half. A tap just explains that. */
+/**
+ * Hold, not tap: a stray touch mid-run must never stop or end the half. A tap flips the label to
+ * "Hold" in place; a Toast would queue one popup per tap and keep showing them after the action.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HoldButton(label: String, onHold: () -> Unit) {
-    val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
+    var hinting by remember { mutableStateOf(false) }
+    LaunchedEffect(hinting) {
+        if (hinting) {
+            delay(1500)
+            hinting = false
+        }
+    }
     Box(
         Modifier
             .clip(RoundedCornerShape(50))
             .background(MaterialTheme.colors.surface)
             .combinedClickable(
-                onClick = {
-                    Toast.makeText(context, "Hold to ${label.lowercase()}", Toast.LENGTH_SHORT).show()
-                },
+                onClick = { hinting = true },
                 onLongClick = {
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     onHold()
                 },
             )
             .padding(horizontal = 14.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(label, style = MaterialTheme.typography.button, color = MaterialTheme.colors.onSurface)
+        val style = MaterialTheme.typography.button
+        // The label stays laid out (just invisible) so the button keeps its width while hinting.
+        Text(label, style = style, color = MaterialTheme.colors.onSurface, modifier = Modifier.alpha(if (hinting) 0f else 1f))
+        if (hinting) Text("Hold", style = style, color = Reached)
     }
 }
