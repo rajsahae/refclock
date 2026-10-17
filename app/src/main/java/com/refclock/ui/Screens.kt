@@ -340,7 +340,8 @@ private fun rememberNow(state: MatchState, ambient: Boolean, ambientTick: Int): 
 private fun AcknowledgeOnTap(content: @Composable () -> Unit) {
     val context = LocalContext.current
     val pending by MatchController.pendingAlert.collectAsState()
-    Box(Modifier.fillMaxSize()) {
+    // Centered: screens that don't fill the space, such as Full time, would otherwise sit top-left.
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         content()
         if (pending != null) {
             Box(Modifier.fillMaxSize().clickable { MatchController.acknowledge(context) })
