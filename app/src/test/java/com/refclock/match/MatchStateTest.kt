@@ -67,7 +67,7 @@ class MatchStateTest {
 
     @Test
     fun nextAlertSkipsPassedCheckpoints() {
-        assertEquals("Quarter break", profile.nextAlert(0)?.label)
+        assertEquals(AlertKind.CHECKPOINT, profile.nextAlert(0)?.kind)
         assertTrue(profile.nextAlert(15 * min)!!.isHalfEnd)
         assertNull(profile.nextAlert(30 * min))
     }

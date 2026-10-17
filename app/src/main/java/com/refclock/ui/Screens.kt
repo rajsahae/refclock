@@ -2,15 +2,18 @@ package com.refclock.ui
 
 import android.os.SystemClock
 import android.provider.Settings
+import androidx.annotation.DrawableRes
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,39 +26,55 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.ScalingLazyListState
-import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.foundation.lazy.items
+import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
+import androidx.wear.compose.material.Button
+import androidx.wear.compose.material.ButtonDefaults
 import androidx.wear.compose.material.Chip
 import androidx.wear.compose.material.ChipDefaults
-import androidx.wear.compose.material.CompactChip
+import androidx.wear.compose.material.CompactButton
 import androidx.wear.compose.material.Icon
 import androidx.wear.compose.material.ListHeader
+import androidx.wear.compose.material.LocalContentColor
 import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Scaffold
 import androidx.wear.compose.material.Text
@@ -67,6 +86,8 @@ import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import com.refclock.MatchController
 import com.refclock.ProfileStore
 import com.refclock.R
+import com.refclock.match.Alert
+import com.refclock.match.AlertKind
 import com.refclock.match.MatchState
 import com.refclock.match.Phase
 import com.refclock.match.Profile
@@ -75,11 +96,15 @@ import com.refclock.match.formatElapsed
 import com.refclock.match.formatLength
 import com.refclock.match.formatRemaining
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val Dim = Color(0xFF9E9E9E)
 private val OverTime = Color(0xFFFFB300)
 private val Reached = Color(0xFF80DEEA)
 private val Tabular = TextStyle(fontFeatureSettings = "tnum")
+
+/** How long a hold button must be held. Its ring fills over this time. */
+private const val HOLD_MS = 600
 
 private object Routes {
     const val MATCH = "match"
@@ -150,20 +175,23 @@ private fun IdleScreen(state: MatchState, onChangeProfile: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(profile.name, style = MaterialTheme.typography.title2)
-        Text("${formatLength(profile.halfLengthMs)} halves", style = MaterialTheme.typography.caption1, color = Dim)
+        Text(halvesText(profile), style = MaterialTheme.typography.caption1, color = Dim)
         Spacer(Modifier.height(4.dp))
-        Chip(
+        Button(
             onClick = { MatchController.kickOff(context) },
-            label = { Text("Kick off") },
-            colors = ChipDefaults.primaryChipColors(),
-        )
-        CompactChip(
-            onClick = onChangeProfile,
-            label = { Text("Change preset") },
-            colors = ChipDefaults.secondaryChipColors(),
-        )
+            colors = ButtonDefaults.primaryButtonColors(),
+            modifier = Modifier.size(ButtonDefaults.LargeButtonSize),
+        ) {
+            ButtonIcon(R.drawable.ic_play, stringResource(R.string.cd_kick_off), size = 32.dp)
+        }
+        CompactButton(onClick = onChangeProfile, colors = ButtonDefaults.secondaryButtonColors()) {
+            ButtonIcon(R.drawable.ic_list, stringResource(R.string.cd_change_profile), size = 20.dp)
+        }
     }
 }
+
+@Composable
+private fun halvesText(profile: Profile) = stringResource(R.string.halves, formatLength(profile.halfLengthMs))
 
 @Composable
 private fun ProfilesRoute(onPicked: () -> Unit) {
@@ -194,12 +222,16 @@ private fun rememberMenuProfiles(): List<Profile> {
 @Composable
 private fun ProfileList(profiles: List<Profile>, listState: ScalingLazyListState, onPick: (Profile) -> Unit) {
     ScalingLazyColumn(Modifier.fillMaxSize(), state = listState) {
-        item { ListHeader { Text("Presets") } }
+        item {
+            ListHeader {
+                ButtonIcon(R.drawable.ic_list, stringResource(R.string.cd_profiles), size = 24.dp, tint = Dim)
+            }
+        }
         items(profiles) { profile ->
             Chip(
                 onClick = { onPick(profile) },
                 label = { Text(profile.name) },
-                secondaryLabel = { Text("${formatLength(profile.halfLengthMs)} halves") },
+                secondaryLabel = { Text(halvesText(profile)) },
                 colors = ChipDefaults.secondaryChipColors(),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -215,7 +247,7 @@ private fun HalfScreen(state: MatchState, ambient: Boolean, ambientTick: Int) {
     val elapsed = state.halfElapsedMs(now)
     val game = state.gameElapsedMs(now)
     val paused = state.phase == Phase.PAUSED
-    val reached by MatchController.pendingAlert.collectAsState()
+    val pending by MatchController.pendingAlert.collectAsState()
 
     // Ambient updates arrive about once a minute, so showing seconds there would be wrong most of the time.
     fun clock(ms: Long) = if (ambient) "${ms / 60_000}'" else formatElapsed(ms)
@@ -225,11 +257,7 @@ private fun HalfScreen(state: MatchState, ambient: Boolean, ambientTick: Int) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(
-            if (state.half == 1) "1st half" else "2nd half",
-            style = MaterialTheme.typography.caption1,
-            color = Dim,
-        )
+        HalfDots(state.half)
         Text(
             clock(elapsed),
             style = Tabular,
@@ -242,55 +270,114 @@ private fun HalfScreen(state: MatchState, ambient: Boolean, ambientTick: Int) {
                 else -> Color.White
             },
         )
-        val pending = reached
-        when {
-            paused -> Text("Paused", style = MaterialTheme.typography.body1, color = Dim)
-            pending != null -> Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                val tint = if (ambient) Color.LightGray else Reached
-                PulsingCheck(animate = !ambient, tint = tint)
-                Text(
-                    if (pending.isHalfEnd) overText(state.half) else pending.label,
-                    style = MaterialTheme.typography.body1,
-                    fontWeight = FontWeight.Bold,
-                    color = tint,
-                )
+        StatusLine(height = 24.dp) {
+            val alert = pending
+            val next = profile.nextAlert(elapsed)
+            when {
+                paused -> ButtonIcon(R.drawable.ic_pause, stringResource(R.string.cd_paused), tint = Dim)
+                alert != null -> ReachedAlert(alert, state.half, ambient)
+                next == null -> AlertIcon(AlertKind.HALF_END, state.half, tint = OverTime)
+                else -> {
+                    val tint = if (ambient) Dim else Color.White
+                    AlertIcon(next.kind, state.half, tint = tint)
+                    if (!ambient) {
+                        Text(
+                            formatRemaining(next.atMs - elapsed),
+                            style = MaterialTheme.typography.body1.merge(Tabular),
+                            color = tint,
+                        )
+                    }
+                }
             }
-            else -> Text(
-                nextAlertText(profile, state.half, elapsed, ambient),
-                style = MaterialTheme.typography.body1.merge(Tabular),
-                color = if (ambient) Dim else Color.White,
-            )
         }
-        Text("Game ${clock(game)}", style = MaterialTheme.typography.caption1.merge(Tabular), color = Dim)
+        Text(
+            stringResource(R.string.game_total, clock(game)),
+            style = MaterialTheme.typography.caption1.merge(Tabular),
+            color = Dim,
+        )
 
         if (!ambient) {
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (paused) {
-                    CompactChip(
-                        onClick = { MatchController.resume(context) },
-                        label = { Text("Resume") },
-                        colors = ChipDefaults.primaryChipColors(),
-                    )
+                    Button(onClick = { MatchController.resume(context) }, colors = ButtonDefaults.primaryButtonColors()) {
+                        ButtonIcon(R.drawable.ic_play, stringResource(R.string.cd_resume))
+                    }
                 } else {
-                    HoldButton("Pause") { MatchController.pause(context) }
+                    HoldButton(R.drawable.ic_pause, stringResource(R.string.cd_pause)) { MatchController.pause(context) }
                 }
-                HoldButton(if (state.half == 1) "End half" else "End game") { MatchController.endHalf(context) }
+                HoldButton(
+                    R.drawable.ic_whistle,
+                    stringResource(if (state.half == 1) R.string.cd_end_half else R.string.cd_end_game),
+                ) { MatchController.endHalf(context) }
             }
         }
     }
 }
 
-private fun nextAlertText(profile: Profile, half: Int, elapsed: Long, ambient: Boolean): String {
-    val next = profile.nextAlert(elapsed) ?: return overText(half)
-    val label = if (!next.isHalfEnd) next.label else if (half == 1) "Half ends" else "Game ends"
-    return if (ambient) "Next: $label" else "$label in ${formatRemaining(next.atMs - elapsed)}"
+/** The line under the big clock, laid out at a fixed height so the screen doesn't jump as it changes. */
+@Composable
+private fun StatusLine(height: Dp, content: @Composable () -> Unit) {
+    Row(
+        Modifier.height(height),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) { content() }
 }
 
-private fun overText(half: Int) = if (half == 1) "Half over" else "Game over"
+/** Filled dots for halves started: one in the first half, two in the second. */
+@Composable
+private fun HalfDots(half: Int, color: Color = Dim) {
+    val description = stringResource(if (half == 1) R.string.cd_first_half else R.string.cd_second_half)
+    Row(
+        Modifier.semantics { contentDescription = description },
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        repeat(2) { i ->
+            Canvas(Modifier.size(8.dp)) {
+                if (i < half) {
+                    drawCircle(color)
+                } else {
+                    drawCircle(color, radius = size.minDimension / 2 - 1.dp.toPx(), style = Stroke(1.5.dp.toPx()))
+                }
+            }
+        }
+    }
+}
+
+/** An alert's icon: water drop for the quarter break, whistle for the end of a half. */
+@Composable
+private fun AlertIcon(kind: AlertKind, half: Int, tint: Color) {
+    when (kind) {
+        AlertKind.CHECKPOINT ->
+            ButtonIcon(R.drawable.ic_water_drop, stringResource(R.string.cd_quarter_break), tint = tint)
+        AlertKind.HALF_END ->
+            ButtonIcon(
+                R.drawable.ic_whistle,
+                stringResource(if (half == 1) R.string.cd_half_end else R.string.cd_game_end),
+                tint = tint,
+            )
+        AlertKind.HALFTIME_END ->
+            Text(stringResource(R.string.halftime_short), style = MaterialTheme.typography.body1, color = tint)
+    }
+}
+
+@Composable
+private fun ReachedAlert(alert: Alert, half: Int, ambient: Boolean) {
+    val tint = if (ambient) Color.LightGray else Reached
+    PulsingCheck(animate = !ambient, tint = tint)
+    AlertIcon(alert.kind, half, tint = tint)
+}
+
+@Composable
+private fun ButtonIcon(
+    @DrawableRes icon: Int,
+    description: String,
+    size: Dp = 24.dp,
+    tint: Color = LocalContentColor.current,
+) {
+    Icon(painterResource(icon), contentDescription = description, tint = tint, modifier = Modifier.size(size))
+}
 
 @Composable
 private fun PulsingCheck(animate: Boolean, tint: Color) {
@@ -304,9 +391,9 @@ private fun PulsingCheck(animate: Boolean, tint: Color) {
     } else 1f
     Icon(
         painterResource(R.drawable.ic_check_circle),
-        contentDescription = "Reached",
+        contentDescription = stringResource(R.string.cd_reached),
         tint = tint,
-        modifier = Modifier.size(20.dp).alpha(alpha),
+        modifier = Modifier.size(22.dp).alpha(alpha),
     )
 }
 
@@ -331,7 +418,7 @@ private fun rememberNow(state: MatchState, ambient: Boolean, ambientTick: Int): 
 
 /**
  * While an alert buzzes, a full-screen layer takes the first tap so it only acknowledges, even on a
- * button: tapping to silence the buzz must never start the second half or show a "Hold" hint instead.
+ * button: tapping to silence the buzz must never start the second half or begin a hold.
  */
 @Composable
 private fun AcknowledgeOnTap(content: @Composable () -> Unit) {
@@ -349,31 +436,49 @@ private fun AcknowledgeOnTap(content: @Composable () -> Unit) {
 @Composable
 private fun FullTimeScreen(state: MatchState, ambient: Boolean) {
     val context = LocalContext.current
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("Full time", style = MaterialTheme.typography.title2)
-        Spacer(Modifier.height(6.dp))
-        val parts = listOf("1st half" to state.firstHalfMs, "Halftime" to state.halftimeMs, "2nd half" to state.endedHalfMs)
-        parts.forEach { (label, ms) -> SummaryRow(label, ms) }
+    // The summary rows make this the tallest screen; the top padding keeps "FT" clear of the time.
+    Column(Modifier.padding(top = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(stringResource(R.string.fulltime_short), style = MaterialTheme.typography.title3)
+        Spacer(Modifier.height(4.dp))
+        SummaryRow(state.firstHalfMs) { HalfDots(1) }
+        SummaryRow(state.halftimeMs) {
+            Text(stringResource(R.string.halftime_short), style = MaterialTheme.typography.body2, color = Dim)
+        }
+        SummaryRow(state.endedHalfMs) { HalfDots(2) }
         // Sum the whole seconds each row shows, so the column always adds up on screen.
-        SummaryRow("Total", parts.sumOf { (_, ms) -> ms / 1000 * 1000 }, emphasized = true)
-        if (!ambient) {
-            Spacer(Modifier.height(10.dp))
-            Chip(
-                onClick = { MatchController.newMatch(context) },
-                label = { Text("New match") },
-                colors = ChipDefaults.primaryChipColors(),
+        val total = listOf(state.firstHalfMs, state.halftimeMs, state.endedHalfMs).sumOf { it / 1000 * 1000 }
+        val totalDescription = stringResource(R.string.cd_total)
+        SummaryRow(total, emphasized = true) {
+            Text(
+                "Σ",
+                Modifier.semantics { contentDescription = totalDescription },
+                style = MaterialTheme.typography.body2,
+                fontWeight = FontWeight.Bold,
             )
+        }
+        if (!ambient) {
+            Spacer(Modifier.height(6.dp))
+            Button(onClick = { MatchController.newMatch(context) }, colors = ButtonDefaults.primaryButtonColors()) {
+                ButtonIcon(R.drawable.ic_replay, stringResource(R.string.cd_new_match))
+            }
         }
     }
 }
 
 @Composable
-private fun SummaryRow(label: String, ms: Long, emphasized: Boolean = false) {
-    val color = if (emphasized) Color.White else Dim
-    val weight = if (emphasized) FontWeight.Bold else FontWeight.Normal
-    Row(Modifier.width(150.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.body2, color = color, fontWeight = weight)
-        Text(formatElapsed(ms), style = MaterialTheme.typography.body2.merge(Tabular), color = color, fontWeight = weight)
+private fun SummaryRow(ms: Long, emphasized: Boolean = false, label: @Composable () -> Unit) {
+    Row(
+        Modifier.width(120.dp).height(20.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        label()
+        Text(
+            formatElapsed(ms),
+            style = MaterialTheme.typography.body2.merge(Tabular),
+            color = if (emphasized) Color.White else Dim,
+            fontWeight = if (emphasized) FontWeight.Bold else FontWeight.Normal,
+        )
     }
 }
 
@@ -385,10 +490,8 @@ private fun HalftimeScreen(state: MatchState, ambient: Boolean, ambientTick: Int
     val over = remaining < 0
     val pending by MatchController.pendingAlert.collectAsState()
 
-    // Two stacked buttons make this screen taller than the half screen; the top padding keeps the
-    // countdown clear of the time of day.
     Column(
-        Modifier.fillMaxSize().padding(top = 16.dp),
+        Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -408,73 +511,83 @@ private fun HalftimeScreen(state: MatchState, ambient: Boolean, ambientTick: Int
                 else -> Color.White
             },
         )
-        // Same spot as the half screen's checkpoint line, directly under the clock.
-        if (pending != null) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                val tint = if (ambient) Color.LightGray else Reached
-                PulsingCheck(animate = !ambient, tint = tint)
-                Text("Halftime over", style = MaterialTheme.typography.body1, fontWeight = FontWeight.Bold, color = tint)
+        // Same spot as the half screen's status line, directly under the clock.
+        StatusLine(height = 24.dp) {
+            val alert = pending
+            if (alert != null) {
+                ReachedAlert(alert, state.half, ambient)
+            } else {
+                Text(stringResource(R.string.halftime_short), style = MaterialTheme.typography.body1, color = Dim)
             }
-        } else {
-            Text("Halftime", style = MaterialTheme.typography.body1, color = Dim)
         }
-        Text(
-            "1st half ${formatElapsed(state.endedHalfMs)}",
-            style = MaterialTheme.typography.caption1.merge(Tabular),
-            color = Dim,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            HalfDots(1)
+            Text(formatElapsed(state.endedHalfMs), style = MaterialTheme.typography.caption1.merge(Tabular), color = Dim)
+        }
         if (!ambient) {
-            Spacer(Modifier.height(10.dp))
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                CompactChip(
-                    onClick = { MatchController.startSecondHalf(context) },
-                    label = { Text("Start 2nd half") },
-                    colors = ChipDefaults.primaryChipColors(),
-                )
-                HoldButton("End match") { MatchController.newMatch(context) }
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = { MatchController.startSecondHalf(context) }, colors = ButtonDefaults.primaryButtonColors()) {
+                    ButtonIcon(R.drawable.ic_play, stringResource(R.string.cd_start_second_half))
+                }
+                HoldButton(R.drawable.ic_close, stringResource(R.string.cd_end_match)) { MatchController.newMatch(context) }
             }
         }
     }
 }
 
 /**
- * Hold, not tap: a stray touch mid-run must never stop or end the half. A tap flips the label to
- * "Hold" in place; a Toast would queue one popup per tap and keep showing them after the action.
+ * Hold, not tap: a stray touch mid-run must never stop or end the half. A ring fills around the icon
+ * while held, which also shows a first-time user that holding is what it wants.
  */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun HoldButton(label: String, onHold: () -> Unit) {
+private fun HoldButton(@DrawableRes icon: Int, description: String, onHold: () -> Unit) {
     val haptics = LocalHapticFeedback.current
-    var hinting by remember { mutableStateOf(false) }
-    LaunchedEffect(hinting) {
-        if (hinting) {
-            delay(1500)
-            hinting = false
-        }
-    }
+    val scope = rememberCoroutineScope()
+    val progress = remember { Animatable(0f) }
+    val currentOnHold by rememberUpdatedState(onHold)
     Box(
         Modifier
-            .clip(RoundedCornerShape(50))
+            .size(ButtonDefaults.DefaultButtonSize)
+            .clip(CircleShape)
             .background(MaterialTheme.colors.surface)
-            .combinedClickable(
-                onClick = { hinting = true },
-                onLongClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onHold()
-                },
-            )
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .semantics {
+                contentDescription = description
+                role = Role.Button
+                onLongClick { currentOnHold(); true }
+            }
+            .pointerInput(Unit) {
+                detectTapGestures(onPress = {
+                    val hold = scope.launch {
+                        progress.animateTo(1f, tween(HOLD_MS, easing = LinearEasing))
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        currentOnHold()
+                    }
+                    tryAwaitRelease()
+                    hold.cancel()
+                    scope.launch { progress.animateTo(0f, tween(150)) }
+                })
+            }
+            .drawWithContent {
+                drawContent()
+                val stroke = 3.dp.toPx()
+                drawArc(
+                    color = Reached,
+                    startAngle = -90f,
+                    sweepAngle = 360f * progress.value,
+                    useCenter = false,
+                    topLeft = Offset(stroke / 2, stroke / 2),
+                    size = Size(size.width - stroke, size.height - stroke),
+                    style = Stroke(stroke),
+                )
+            },
         contentAlignment = Alignment.Center,
     ) {
-        val style = MaterialTheme.typography.button
-        // The label stays laid out (just invisible) so the button keeps its width while hinting.
-        Text(label, style = style, color = MaterialTheme.colors.onSurface, modifier = Modifier.alpha(if (hinting) 0f else 1f))
-        if (hinting) Text("Hold", style = style, color = Reached)
+        Icon(
+            painterResource(icon),
+            contentDescription = null,
+            tint = MaterialTheme.colors.onSurface,
+            modifier = Modifier.size(24.dp),
+        )
     }
 }

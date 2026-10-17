@@ -75,11 +75,11 @@ class MatchService : Service() {
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val halfLabel = if (state.half == 1) "H1" else "H2"
+        val halfLabel = getString(if (state.half == 1) R.string.status_first_half else R.string.status_second_half)
         val text = when (state.phase) {
             Phase.RUNNING -> halfLabel
-            Phase.PAUSED -> "$halfLabel paused"
-            else -> "Halftime"
+            Phase.PAUSED -> getString(R.string.status_paused, halfLabel)
+            else -> getString(R.string.halftime_short)
         }
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_clock)
@@ -97,7 +97,7 @@ class MatchService : Service() {
                 .addPart("clock", Status.StopwatchPart(state.clockZero))
                 .build()
             Phase.HALFTIME -> Status.Builder()
-                .addTemplate("HT #clock#")
+                .addTemplate(getString(R.string.halftime_short) + " #clock#")
                 .addPart(
                     "clock",
                     Status.TimerPart(state.halftimeStartedAt + state.profile.halftimeLengthMs),

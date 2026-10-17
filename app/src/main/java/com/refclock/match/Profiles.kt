@@ -24,12 +24,12 @@ data class Profile(
     /** Alerts during a half, in order. */
     val alerts: List<Alert>
         get() = listOfNotNull(
-            breakAtMs?.let { Alert(it, "Quarter break", AlertKind.CHECKPOINT) },
-            Alert(halfLengthMs, "Half ends", AlertKind.HALF_END),
+            breakAtMs?.let { Alert(it, AlertKind.CHECKPOINT) },
+            Alert(halfLengthMs, AlertKind.HALF_END),
         )
 
     val halftimeAlert: Alert
-        get() = Alert(halftimeLengthMs, "Halftime over", AlertKind.HALFTIME_END)
+        get() = Alert(halftimeLengthMs, AlertKind.HALFTIME_END)
 
     fun nextAlert(halfElapsedMs: Long): Alert? = alerts.firstOrNull { it.atMs > halfElapsedMs }
 }

@@ -1,4 +1,39 @@
 <resources>
     <string name="app_name">Ref Clock</string>
     <string name="channel_match">Match in progress</string>
+
+    <!-- Short labels shown on screen. HT/FT are the usual soccer abbreviations. -->
+    <string name="halftime_short">HT</string>
+    <string name="fulltime_short">FT</string>
+    <!-- %s is a length such as "25m": two halves of that length. -->
+    <string name="halves">2 × %s</string>
+    <!-- %s is the game clock, e.g. "37:12". -->
+    <string name="game_total">Σ %s</string>
+
+    <!-- Watch-face status. -->
+    <string name="status_first_half">H1</string>
+    <string name="status_second_half">H2</string>
+    <!-- %s is status_first_half or status_second_half. -->
+    <string name="status_paused">%s ⏸</string>
+
+    <!-- Spoken descriptions for icons and icon-only buttons (screen readers). -->
+    <string name="cd_kick_off">Kick off</string>
+    <string name="cd_change_profile">Change profile</string>
+    <string name="cd_profiles">Profiles</string>
+    <string name="cd_pause">Pause, hold</string>
+    <string name="cd_resume">Resume</string>
+    <string name="cd_end_half">End half, hold</string>
+    <string name="cd_end_game">End game, hold</string>
+    <string name="cd_start_second_half">Start second half</string>
+    <string name="cd_end_match">End match, hold</string>
+    <string name="cd_new_match">New match</string>
+    <string name="cd_first_half">First half</string>
+    <string name="cd_second_half">Second half</string>
+    <string name="cd_halftime">Halftime</string>
+    <string name="cd_total">Total</string>
+    <string name="cd_paused">Paused</string>
+    <string name="cd_reached">Reached</string>
+    <string name="cd_quarter_break">Quarter break</string>
+    <string name="cd_half_end">Half end</string>
+    <string name="cd_game_end">Game end</string>
 </resources>

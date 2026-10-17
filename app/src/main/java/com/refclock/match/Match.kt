@@ -3,7 +3,7 @@ package com.refclock.match
 enum class AlertKind { CHECKPOINT, HALF_END, HALFTIME_END }
 
 /** [atMs] is on the half clock, or for [AlertKind.HALFTIME_END] on the halftime clock. */
-data class Alert(val atMs: Long, val label: String, val kind: AlertKind) {
+data class Alert(val atMs: Long, val kind: AlertKind) {
     val isHalfEnd: Boolean get() = kind == AlertKind.HALF_END
 }
 
