@@ -2,8 +2,6 @@ package com.refclock.ui
 
 import android.os.SystemClock
 import android.provider.Settings
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -49,9 +47,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
-import androidx.wear.compose.foundation.BasicSwipeToDismissBox
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.ScalingLazyListState
+import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.foundation.lazy.items
 import androidx.wear.compose.material.Chip
 import androidx.wear.compose.material.ChipDefaults
@@ -63,6 +61,9 @@ import androidx.wear.compose.material.Scaffold
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
 import androidx.wear.compose.material.scrollAway
+import androidx.wear.compose.navigation.SwipeDismissableNavHost
+import androidx.wear.compose.navigation.composable
+import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import com.refclock.MatchController
 import com.refclock.ProfileStore
 import com.refclock.R
@@ -80,39 +81,29 @@ private val OverTime = Color(0xFFFFB300)
 private val Reached = Color(0xFF80DEEA)
 private val Tabular = TextStyle(fontFeatureSettings = "tnum")
 
+private object Routes {
+    const val MATCH = "match"
+    const val PROFILES = "profiles"
+}
+
 @Composable
 fun RefClockApp(ambient: Boolean, ambientTick: Int) {
-    val state by MatchController.state.collectAsState()
-    val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
-    val inHalf = state.phase == Phase.RUNNING || state.phase == Phase.PAUSED
-    var picking by remember { mutableStateOf(false) }
-    val profileListState = remember(picking) { ScalingLazyListState() }
+    val navController = rememberSwipeDismissableNavController()
     MaterialTheme {
-        // Swipe-right is an ordinary back, except during a half: a brushed sleeve mid-run must not
-        // knock the clock off screen. The crown still exits.
-        BasicSwipeToDismissBox(
-            onDismissed = { backDispatcher?.onBackPressed() },
-            userSwipeEnabled = !inHalf,
-        ) { isBackground ->
-            // OLED burn-in: the ambient clock can stay on screen for a whole half, so nudge it each minute.
-            val step = with(LocalDensity.current) { 4.dp.roundToPx() }
-            val shift = if (ambient) IntOffset((ambientTick % 3 - 1) * step, (ambientTick / 3 % 3 - 1) * step) else IntOffset.Zero
-            Box(Modifier.fillMaxSize().background(Color.Black).offset { shift }) {
-                if (!isBackground) {
-                    // The time slides away as the profile list scrolls instead of overlapping its items.
-                    Scaffold(
-                        timeText = { TimeText(if (picking) Modifier.scrollAway(profileListState) else Modifier) },
-                    ) {
-                        Box(
-                            Modifier.fillMaxSize().padding(horizontal = 12.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (state.phase == Phase.IDLE) {
-                                IdleScreen(state, picking, { picking = it }, profileListState)
-                            } else {
-                                Screen(state, ambient, ambientTick)
-                            }
-                        }
+        // OLED burn-in: the ambient clock can stay on screen for a whole half, so nudge it each minute.
+        val step = with(LocalDensity.current) { 4.dp.roundToPx() }
+        val shift = if (ambient) IntOffset((ambientTick % 3 - 1) * step, (ambientTick / 3 % 3 - 1) * step) else IntOffset.Zero
+        Box(Modifier.fillMaxSize().background(Color.Black).offset { shift }) {
+            SwipeDismissableNavHost(navController = navController, startDestination = Routes.MATCH) {
+                composable(Routes.MATCH) {
+                    MatchRoute(ambient, ambientTick) {
+                        navController.navigate(Routes.PROFILES) { launchSingleTop = true }
+                    }
+                }
+                composable(Routes.PROFILES) {
+                    ProfilesRoute {
+                        // Guarded: a second tap mustn't pop the match screen and leave nothing showing.
+                        if (navController.currentDestination?.route == Routes.PROFILES) navController.popBackStack()
                     }
                 }
             }
@@ -121,33 +112,33 @@ fun RefClockApp(ambient: Boolean, ambientTick: Int) {
 }
 
 @Composable
-private fun Screen(state: MatchState, ambient: Boolean, ambientTick: Int) = AcknowledgeOnTap {
-    when (state.phase) {
-        Phase.IDLE -> Unit // Drawn by RefClockApp, which owns the profile picker's state.
-        Phase.RUNNING, Phase.PAUSED -> HalfScreen(state, ambient, ambientTick)
-        Phase.HALFTIME -> HalftimeScreen(state, ambient, ambientTick)
-        Phase.FINISHED -> FullTimeScreen(state, ambient)
+private fun MatchRoute(ambient: Boolean, ambientTick: Int, onChangeProfile: () -> Unit) {
+    val state by MatchController.state.collectAsState()
+    Scaffold(timeText = { TimeText() }) {
+        Box(
+            Modifier.fillMaxSize().padding(horizontal = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Screen(state, ambient, ambientTick, onChangeProfile)
+        }
     }
 }
 
 @Composable
-private fun IdleScreen(
-    state: MatchState,
-    picking: Boolean,
-    setPicking: (Boolean) -> Unit,
-    listState: ScalingLazyListState,
-) {
-    val context = LocalContext.current
-    val profiles = rememberMenuProfiles()
-    BackHandler(enabled = picking) { setPicking(false) }
-    if (picking) {
-        ProfileList(profiles, listState) { profile ->
-            MatchController.selectProfile(context, profile.id)
-            setPicking(false)
+private fun Screen(state: MatchState, ambient: Boolean, ambientTick: Int, onChangeProfile: () -> Unit) =
+    AcknowledgeOnTap {
+        when (state.phase) {
+            Phase.IDLE -> IdleScreen(state, onChangeProfile)
+            Phase.RUNNING, Phase.PAUSED -> HalfScreen(state, ambient, ambientTick)
+            Phase.HALFTIME -> HalftimeScreen(state, ambient, ambientTick)
+            Phase.FINISHED -> FullTimeScreen(state, ambient)
         }
-        return
     }
 
+@Composable
+private fun IdleScreen(state: MatchState, onChangeProfile: () -> Unit) {
+    val context = LocalContext.current
+    val profiles = rememberMenuProfiles()
     val profile = profiles.firstOrNull { it.id == state.profileId } ?: profiles.first()
     // Kick off starts state.profileId, so a last-used profile that's now hidden or deleted must be
     // replaced there too.
@@ -167,10 +158,26 @@ private fun IdleScreen(
             colors = ChipDefaults.primaryChipColors(),
         )
         CompactChip(
-            onClick = { setPicking(true) },
+            onClick = onChangeProfile,
             label = { Text("Change preset") },
             colors = ChipDefaults.secondaryChipColors(),
         )
+    }
+}
+
+@Composable
+private fun ProfilesRoute(onPicked: () -> Unit) {
+    val context = LocalContext.current
+    val profiles = rememberMenuProfiles()
+    val listState = rememberScalingLazyListState()
+    // The time slides away as the list scrolls instead of overlapping its items.
+    Scaffold(timeText = { TimeText(Modifier.scrollAway(listState)) }) {
+        Box(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
+            ProfileList(profiles, listState) { profile ->
+                MatchController.selectProfile(context, profile.id)
+                onPicked()
+            }
+        }
     }
 }
 

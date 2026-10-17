@@ -1,6 +1,3 @@
 <resources>
-    <style name="Theme.RefClock" parent="@android:style/Theme.DeviceDefault">
-        <!-- Swipe-to-dismiss is done in Compose instead (RefClockApp) so it can be blocked during a half. -->
-        <item name="android:windowSwipeToDismiss">false</item>
-    </style>
+    <style name="Theme.RefClock" parent="@android:style/Theme.DeviceDefault" />
 </resources>
