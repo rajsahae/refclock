@@ -1,32 +1,10 @@
 package com.refclock.match
 
-data class Checkpoint(val atMs: Long, val label: String)
-
 enum class AlertKind { CHECKPOINT, HALF_END, HALFTIME_END }
 
 /** [atMs] is on the half clock, or for [AlertKind.HALFTIME_END] on the halftime clock. */
 data class Alert(val atMs: Long, val label: String, val kind: AlertKind) {
     val isHalfEnd: Boolean get() = kind == AlertKind.HALF_END
-}
-
-data class Preset(
-    val id: String,
-    val name: String,
-    val halfLengthMs: Long,
-    val halftimeLengthMs: Long,
-    val checkpoints: List<Checkpoint>,
-    /** Listed only while the watch has Developer options turned on. */
-    val devOnly: Boolean = false,
-) {
-    /** Alerts during a half, in order. */
-    val alerts: List<Alert> =
-        (checkpoints.map { Alert(it.atMs, it.label, AlertKind.CHECKPOINT) } +
-            Alert(halfLengthMs, "Half ends", AlertKind.HALF_END))
-            .sortedBy { it.atMs }
-
-    val halftimeAlert = Alert(halftimeLengthMs, "Halftime over", AlertKind.HALFTIME_END)
-
-    fun nextAlert(halfElapsedMs: Long): Alert? = alerts.firstOrNull { it.atMs > halfElapsedMs }
 }
 
 enum class Phase { IDLE, RUNNING, PAUSED, HALFTIME, FINISHED }
@@ -37,7 +15,10 @@ enum class Phase { IDLE, RUNNING, PAUSED, HALFTIME, FINISHED }
  */
 data class MatchState(
     val phase: Phase = Phase.IDLE,
-    val presetId: String = Presets.default.id,
+    /** The profile chosen on the setup screen. */
+    val profileId: String = Profiles.defaults.first().id,
+    /** Copied at kickoff, so editing or deleting the profile mid-match can't move the clock or its alerts. */
+    val profile: Profile = Profiles.defaults.first(),
     val half: Int = 1,
     val halfStartedAt: Long = 0,
     val pausedTotalMs: Long = 0,
@@ -65,15 +46,18 @@ data class MatchState(
         if (phase == Phase.HALFTIME) (now - halftimeStartedAt).coerceAtLeast(0) else 0
 
     /** Earlier halves count at their scheduled length, not as played. */
-    fun gameElapsedMs(preset: Preset, now: Long): Long =
-        (half - 1) * preset.halfLengthMs + halfElapsedMs(now)
+    fun gameElapsedMs(now: Long): Long =
+        (half - 1) * profile.halfLengthMs + halfElapsedMs(now)
 
-    fun selectPreset(id: String) =
-        if (phase == Phase.IDLE) copy(presetId = id) else this
+    fun selectProfile(id: String) =
+        if (phase == Phase.IDLE) copy(profileId = id) else this
 
-    fun kickOff(now: Long) =
+    fun kickOff(now: Long, profile: Profile) =
         if (phase == Phase.IDLE) {
-            copy(phase = Phase.RUNNING, half = 1, halfStartedAt = now, pausedTotalMs = 0, endedHalfMs = 0)
+            copy(
+                phase = Phase.RUNNING, profile = profile, half = 1,
+                halfStartedAt = now, pausedTotalMs = 0, endedHalfMs = 0,
+            )
         } else this
 
     fun pause(now: Long) =
@@ -98,7 +82,7 @@ data class MatchState(
             copy(phase = Phase.RUNNING, half = 2, halfStartedAt = now, pausedTotalMs = 0)
         } else this
 
-    fun newMatch() = MatchState(presetId = presetId)
+    fun newMatch() = MatchState(profileId = profileId)
 }
 
 /** Compact length for menus, e.g. "25m", "30s" or "27m 30s". */

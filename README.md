@@ -9,7 +9,7 @@ preset checkpoints (quarter break, half end) that vibrate the watch.
 - While a match is on, an indicator on the watch face reopens the app, and raising your
   wrist returns to the clock rather than the watch face.
 
-Presets live in `app/src/main/java/com/refclock/match/Presets.kt`. "Test" is there for
+Default profiles live in `app/src/main/java/com/refclock/match/Profiles.kt`. "Test" is there for
 checking the vibrations quickly, and is listed only while Developer options are on.
 
 ## Build

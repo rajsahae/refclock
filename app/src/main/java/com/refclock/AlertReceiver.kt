@@ -13,21 +13,20 @@ import android.os.VibratorManager
 import com.refclock.match.Alert
 import com.refclock.match.AlertKind
 import com.refclock.match.Phase
-import com.refclock.match.Presets
 
 class AlertReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val state = MatchController.state.value
-        val preset = Presets.byId(state.presetId)
+        val profile = state.profile
         val index = intent.getIntExtra(EXTRA_ALERT, -1)
         val now = SystemClock.elapsedRealtime()
         // Drops an alarm that was already in flight when its phase ended, including one that lands
         // just after a quick pause/resume, before its checkpoint is due again.
         val (alert, elapsed) = when {
             index == HALFTIME_ALERT && state.phase == Phase.HALFTIME ->
-                preset.halftimeAlert to state.halftimeElapsedMs(now)
+                profile.halftimeAlert to state.halftimeElapsedMs(now)
             state.phase == Phase.RUNNING && state.half == intent.getIntExtra(EXTRA_HALF, 0) ->
-                (preset.alerts.getOrNull(index) ?: return) to state.halfElapsedMs(now)
+                (profile.alerts.getOrNull(index) ?: return) to state.halfElapsedMs(now)
             else -> return
         }
         if (elapsed < alert.atMs - DUE_SLACK_MS) return

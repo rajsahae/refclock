@@ -8,7 +8,7 @@ import androidx.core.content.edit
 import com.refclock.match.Alert
 import com.refclock.match.MatchState
 import com.refclock.match.Phase
-import com.refclock.match.Presets
+import com.refclock.match.Profiles
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,8 +32,10 @@ object MatchController {
         _state.value = load()
     }
 
-    fun selectPreset(context: Context, id: String) = update(context) { it.selectPreset(id) }
-    fun kickOff(context: Context) = update(context) { it.kickOff(now()) }
+    fun selectProfile(context: Context, id: String) = update(context) { it.selectProfile(id) }
+    fun kickOff(context: Context) = update(context) {
+        it.kickOff(now(), ProfileStore.byId(it.profileId) ?: ProfileStore.profiles.value.first())
+    }
     fun pause(context: Context) = update(context) { it.pause(now()) }
     fun resume(context: Context) = update(context) { it.resume(now()) }
     fun endHalf(context: Context) = update(context) { it.endHalf(now()) }
@@ -66,7 +68,8 @@ object MatchController {
 
     private fun save(s: MatchState) = prefs.edit {
         putString("phase", s.phase.name)
-        putString("presetId", s.presetId)
+        putString("profileId", s.profileId)
+        putString("profile", Profiles.encode(s.profile))
         putInt("half", s.half)
         putLong("halfStartedAt", s.halfStartedAt)
         putLong("pausedTotalMs", s.pausedTotalMs)
@@ -83,7 +86,10 @@ object MatchController {
         val now = SystemClock.elapsedRealtime()
         val s = MatchState(
             phase = phase,
-            presetId = Presets.byId(prefs.getString("presetId", null)).id,
+            // Saved before profiles existed, a match has only a "presetId", which the default profiles reuse.
+            profileId = prefs.getString("profileId", null)
+                ?: prefs.getString("presetId", null)
+                ?: Profiles.defaults.first().id,
             half = prefs.getInt("half", 1),
             halfStartedAt = prefs.getLong("halfStartedAt", 0),
             pausedTotalMs = prefs.getLong("pausedTotalMs", 0),
@@ -91,7 +97,11 @@ object MatchController {
             endedHalfMs = prefs.getLong("endedHalfMs", 0),
             // Missing when the halftime was saved by a version without the halftime clock.
             halftimeStartedAt = prefs.getLong("halftimeStartedAt", now),
-        )
+        ).let { s ->
+            val profile = prefs.getString("profile", null)?.let(Profiles::decode)
+                ?: ProfileStore.byId(s.profileId) ?: Profiles.defaults.first()
+            s.copy(profile = profile)
+        }
         // elapsedRealtime() restarts at boot, so a half that was running before a reboot can't be recovered.
         // BOOT_COUNT can read 0 on some builds; a start time in the future is a reboot regardless.
         val rebooted = prefs.getInt("bootCount", bootCount) != bootCount ||

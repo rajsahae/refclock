@@ -18,7 +18,6 @@ import androidx.wear.ongoing.OngoingActivity
 import androidx.wear.ongoing.Status
 import com.refclock.match.MatchState
 import com.refclock.match.Phase
-import com.refclock.match.Presets
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -101,7 +100,7 @@ class MatchService : Service() {
                 .addTemplate("HT #clock#")
                 .addPart(
                     "clock",
-                    Status.TimerPart(state.halftimeStartedAt + Presets.byId(state.presetId).halftimeLengthMs),
+                    Status.TimerPart(state.halftimeStartedAt + state.profile.halftimeLengthMs),
                 )
                 .build()
             else -> Status.Builder().addTemplate(text).build()

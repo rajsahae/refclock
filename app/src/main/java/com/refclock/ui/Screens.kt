@@ -63,11 +63,12 @@ import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
 import androidx.wear.compose.material.scrollAway
 import com.refclock.MatchController
+import com.refclock.ProfileStore
 import com.refclock.R
 import com.refclock.match.MatchState
 import com.refclock.match.Phase
-import com.refclock.match.Preset
-import com.refclock.match.Presets
+import com.refclock.match.Profile
+import com.refclock.match.Profiles
 import com.refclock.match.formatElapsed
 import com.refclock.match.formatLength
 import com.refclock.match.formatRemaining
@@ -84,7 +85,7 @@ fun RefClockApp(ambient: Boolean, ambientTick: Int) {
     val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
     val inHalf = state.phase == Phase.RUNNING || state.phase == Phase.PAUSED
     var picking by remember { mutableStateOf(false) }
-    val presetListState = remember(picking) { ScalingLazyListState() }
+    val profileListState = remember(picking) { ScalingLazyListState() }
     MaterialTheme {
         // Swipe-right is an ordinary back, except during a half: a brushed sleeve mid-run must not
         // knock the clock off screen. The crown still exits.
@@ -97,16 +98,16 @@ fun RefClockApp(ambient: Boolean, ambientTick: Int) {
             val shift = if (ambient) IntOffset((ambientTick % 3 - 1) * step, (ambientTick / 3 % 3 - 1) * step) else IntOffset.Zero
             Box(Modifier.fillMaxSize().background(Color.Black).offset { shift }) {
                 if (!isBackground) {
-                    // The time slides away as the preset list scrolls instead of overlapping its items.
+                    // The time slides away as the profile list scrolls instead of overlapping its items.
                     Scaffold(
-                        timeText = { TimeText(if (picking) Modifier.scrollAway(presetListState) else Modifier) },
+                        timeText = { TimeText(if (picking) Modifier.scrollAway(profileListState) else Modifier) },
                     ) {
                         Box(
                             Modifier.fillMaxSize().padding(horizontal = 12.dp),
                             contentAlignment = Alignment.Center,
                         ) {
                             if (state.phase == Phase.IDLE) {
-                                IdleScreen(state, picking, { picking = it }, presetListState)
+                                IdleScreen(state, picking, { picking = it }, profileListState)
                             } else {
                                 Screen(state, ambient, ambientTick)
                             }
@@ -121,7 +122,7 @@ fun RefClockApp(ambient: Boolean, ambientTick: Int) {
 @Composable
 private fun Screen(state: MatchState, ambient: Boolean, ambientTick: Int) = AcknowledgeOnTap {
     when (state.phase) {
-        Phase.IDLE -> Unit // Drawn by RefClockApp, which owns the preset picker's state.
+        Phase.IDLE -> Unit // Drawn by RefClockApp, which owns the profile picker's state.
         Phase.RUNNING, Phase.PAUSED -> HalfScreen(state, ambient, ambientTick)
         Phase.HALFTIME -> HalftimeScreen(state, ambient, ambientTick)
         Phase.FINISHED -> BreakScreen(
@@ -147,27 +148,28 @@ private fun IdleScreen(
     listState: ScalingLazyListState,
 ) {
     val context = LocalContext.current
-    val presets = rememberMenuPresets()
+    val profiles = rememberMenuProfiles()
     BackHandler(enabled = picking) { setPicking(false) }
     if (picking) {
-        PresetList(presets, listState) { preset ->
-            MatchController.selectPreset(context, preset.id)
+        ProfileList(profiles, listState) { profile ->
+            MatchController.selectProfile(context, profile.id)
             setPicking(false)
         }
         return
     }
 
-    val preset = Presets.byId(state.presetId).takeIf { it in presets } ?: presets.first()
-    // Kick off starts state.presetId, so a last-used preset that's now hidden must be replaced there too.
-    LaunchedEffect(preset.id) {
-        if (preset.id != state.presetId) MatchController.selectPreset(context, preset.id)
+    val profile = profiles.firstOrNull { it.id == state.profileId } ?: profiles.first()
+    // Kick off starts state.profileId, so a last-used profile that's now hidden or deleted must be
+    // replaced there too.
+    LaunchedEffect(profile.id) {
+        if (profile.id != state.profileId) MatchController.selectProfile(context, profile.id)
     }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(preset.name, style = MaterialTheme.typography.title2)
-        Text("${formatLength(preset.halfLengthMs)} halves", style = MaterialTheme.typography.caption1, color = Dim)
+        Text(profile.name, style = MaterialTheme.typography.title2)
+        Text("${formatLength(profile.halfLengthMs)} halves", style = MaterialTheme.typography.caption1, color = Dim)
         Spacer(Modifier.height(4.dp))
         Chip(
             onClick = { MatchController.kickOff(context) },
@@ -183,25 +185,24 @@ private fun IdleScreen(
 }
 
 @Composable
-private fun rememberMenuPresets(): List<Preset> {
+private fun rememberMenuProfiles(): List<Profile> {
     val context = LocalContext.current
-    return remember {
-        val developer = Settings.Global.getInt(
-            context.contentResolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0,
-        ) != 0
-        Presets.all.filter { developer || !it.devOnly }
+    val saved by ProfileStore.profiles.collectAsState()
+    val developer = remember {
+        Settings.Global.getInt(context.contentResolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) != 0
     }
+    return if (developer) saved + Profiles.test else saved
 }
 
 @Composable
-private fun PresetList(presets: List<Preset>, listState: ScalingLazyListState, onPick: (Preset) -> Unit) {
+private fun ProfileList(profiles: List<Profile>, listState: ScalingLazyListState, onPick: (Profile) -> Unit) {
     ScalingLazyColumn(Modifier.fillMaxSize(), state = listState) {
         item { ListHeader { Text("Presets") } }
-        items(presets) { preset ->
+        items(profiles) { profile ->
             Chip(
-                onClick = { onPick(preset) },
-                label = { Text(preset.name) },
-                secondaryLabel = { Text("${formatLength(preset.halfLengthMs)} halves") },
+                onClick = { onPick(profile) },
+                label = { Text(profile.name) },
+                secondaryLabel = { Text("${formatLength(profile.halfLengthMs)} halves") },
                 colors = ChipDefaults.secondaryChipColors(),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -212,10 +213,10 @@ private fun PresetList(presets: List<Preset>, listState: ScalingLazyListState, o
 @Composable
 private fun HalfScreen(state: MatchState, ambient: Boolean, ambientTick: Int) {
     val context = LocalContext.current
-    val preset = Presets.byId(state.presetId)
+    val profile = state.profile
     val now = rememberNow(state, ambient, ambientTick)
     val elapsed = state.halfElapsedMs(now)
-    val game = state.gameElapsedMs(preset, now)
+    val game = state.gameElapsedMs(now)
     val paused = state.phase == Phase.PAUSED
     val reached by MatchController.pendingAlert.collectAsState()
 
@@ -240,7 +241,7 @@ private fun HalfScreen(state: MatchState, ambient: Boolean, ambientTick: Int) {
             color = when {
                 ambient -> Color.LightGray
                 paused -> Dim
-                elapsed >= preset.halfLengthMs -> OverTime
+                elapsed >= profile.halfLengthMs -> OverTime
                 else -> Color.White
             },
         )
@@ -261,7 +262,7 @@ private fun HalfScreen(state: MatchState, ambient: Boolean, ambientTick: Int) {
                 )
             }
             else -> Text(
-                nextAlertText(preset, state.half, elapsed, ambient),
+                nextAlertText(profile, state.half, elapsed, ambient),
                 style = MaterialTheme.typography.body1.merge(Tabular),
                 color = if (ambient) Dim else Color.White,
             )
@@ -286,8 +287,8 @@ private fun HalfScreen(state: MatchState, ambient: Boolean, ambientTick: Int) {
     }
 }
 
-private fun nextAlertText(preset: Preset, half: Int, elapsed: Long, ambient: Boolean): String {
-    val next = preset.nextAlert(elapsed) ?: return overText(half)
+private fun nextAlertText(profile: Profile, half: Int, elapsed: Long, ambient: Boolean): String {
+    val next = profile.nextAlert(elapsed) ?: return overText(half)
     val label = if (!next.isHalfEnd) next.label else if (half == 1) "Half ends" else "Game ends"
     return if (ambient) "Next: $label" else "$label in ${formatRemaining(next.atMs - elapsed)}"
 }
@@ -350,9 +351,8 @@ private fun AcknowledgeOnTap(content: @Composable () -> Unit) {
 @Composable
 private fun HalftimeScreen(state: MatchState, ambient: Boolean, ambientTick: Int) {
     val context = LocalContext.current
-    val preset = Presets.byId(state.presetId)
     val now = rememberNow(state, ambient, ambientTick)
-    val remaining = preset.halftimeLengthMs - state.halftimeElapsedMs(now)
+    val remaining = state.profile.halftimeLengthMs - state.halftimeElapsedMs(now)
     val over = remaining < 0
     val pending by MatchController.pendingAlert.collectAsState()
 

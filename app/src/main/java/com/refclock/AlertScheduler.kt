@@ -8,7 +8,6 @@ import android.os.Build
 import android.os.SystemClock
 import com.refclock.match.MatchState
 import com.refclock.match.Phase
-import com.refclock.match.Presets
 
 /**
  * Alerts are system alarms rather than in-process timers so they fire on time
@@ -32,21 +31,21 @@ object AlertScheduler {
             }
         }
 
-        val preset = Presets.byId(state.presetId)
+        val profile = state.profile
         val now = SystemClock.elapsedRealtime()
         when (state.phase) {
             Phase.RUNNING -> {
                 val elapsed = state.halfElapsedMs(now)
-                preset.alerts.take(MAX_ALERTS).forEachIndexed { i, alert ->
+                profile.alerts.take(MAX_ALERTS).forEachIndexed { i, alert ->
                     if (alert.atMs > elapsed) {
                         set(context, alarms, i, state.clockZero + alert.atMs, state.half, alertIndex = i)
                     }
                 }
             }
             Phase.HALFTIME -> {
-                if (preset.halftimeAlert.atMs > state.halftimeElapsedMs(now)) {
+                if (profile.halftimeAlert.atMs > state.halftimeElapsedMs(now)) {
                     set(
-                        context, alarms, HALFTIME_REQUEST, state.halftimeStartedAt + preset.halftimeAlert.atMs,
+                        context, alarms, HALFTIME_REQUEST, state.halftimeStartedAt + profile.halftimeAlert.atMs,
                         state.half, alertIndex = AlertReceiver.HALFTIME_ALERT,
                     )
                 }
