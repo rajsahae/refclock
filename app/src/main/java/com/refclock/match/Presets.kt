@@ -9,6 +9,7 @@ object Presets {
             id = "test",
             name = "Test",
             halfLengthMs = mmss(0, 30),
+            halftimeLengthMs = mmss(0, 15),
             checkpoints = listOf(Checkpoint(mmss(0, 15), "Checkpoint")),
             devOnly = true,
         ),
@@ -24,10 +25,17 @@ object Presets {
      */
     private fun ayso(id: String, name: String, halfMinutes: Int): Preset {
         val half = mmss(halfMinutes)
-        return Preset(id, name, half, listOf(Checkpoint((half - WATER_BREAK_MS) / 2, "Quarter break")))
+        return Preset(
+            id = id,
+            name = name,
+            halfLengthMs = half,
+            halftimeLengthMs = AYSO_HALFTIME_MS,
+            checkpoints = listOf(Checkpoint((half - WATER_BREAK_MS) / 2, "Quarter break")),
+        )
     }
 
     private const val WATER_BREAK_MS = 60_000L
+    private const val AYSO_HALFTIME_MS = 5 * 60_000L
 
     private fun mmss(minutes: Int, seconds: Int = 0): Long = (minutes * 60L + seconds) * 1000
 }

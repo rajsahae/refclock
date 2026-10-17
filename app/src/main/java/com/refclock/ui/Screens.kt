@@ -119,23 +119,11 @@ fun RefClockApp(ambient: Boolean, ambientTick: Int) {
 }
 
 @Composable
-private fun Screen(state: MatchState, ambient: Boolean, ambientTick: Int) {
+private fun Screen(state: MatchState, ambient: Boolean, ambientTick: Int) = AcknowledgeOnTap {
     when (state.phase) {
         Phase.IDLE -> Unit // Drawn by RefClockApp, which owns the preset picker's state.
         Phase.RUNNING, Phase.PAUSED -> HalfScreen(state, ambient, ambientTick)
-        Phase.HALFTIME -> BreakScreen(
-            title = "Halftime",
-            summary = "1st half ${formatElapsed(state.endedHalfMs)}",
-            ambient = ambient,
-        ) {
-            val context = LocalContext.current
-            Chip(
-                onClick = { MatchController.startSecondHalf(context) },
-                label = { Text("Start 2nd half") },
-                colors = ChipDefaults.primaryChipColors(),
-            )
-            HoldButton("End match") { MatchController.newMatch(context) }
-        }
+        Phase.HALFTIME -> HalftimeScreen(state, ambient, ambientTick)
         Phase.FINISHED -> BreakScreen(
             title = "Full time",
             summary = "2nd half ${formatElapsed(state.endedHalfMs)}",
@@ -234,11 +222,8 @@ private fun HalfScreen(state: MatchState, ambient: Boolean, ambientTick: Int) {
     // Ambient updates arrive about once a minute, so showing seconds there would be wrong most of the time.
     fun clock(ms: Long) = if (ambient) "${ms / 60_000}'" else formatElapsed(ms)
 
-    // While an alert is buzzing, a tap anywhere acknowledges it; the hold buttons still need a hold.
     Column(
-        Modifier
-            .fillMaxSize()
-            .then(if (reached != null) Modifier.clickable { MatchController.acknowledge(context) } else Modifier),
+        Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -332,13 +317,101 @@ private fun rememberNow(state: MatchState, ambient: Boolean, ambientTick: Int): 
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     LaunchedEffect(state, ambient, ambientTick) {
         now = SystemClock.elapsedRealtime()
-        // Wake on each whole second of the half clock so digits change exactly on the second.
-        while (!ambient && state.phase == Phase.RUNNING) {
-            delay(1000 - state.halfElapsedMs(now) % 1000)
+        val clockZero = when (state.phase) {
+            Phase.RUNNING -> state.clockZero
+            Phase.HALFTIME -> state.halftimeStartedAt
+            else -> null
+        }
+        // Wake on each whole second of whichever clock is running so digits change exactly on the second.
+        while (!ambient && clockZero != null) {
+            delay(1000 - (now - clockZero) % 1000)
             now = SystemClock.elapsedRealtime()
         }
     }
     return now
+}
+
+/**
+ * While an alert buzzes, a full-screen layer takes the first tap so it only acknowledges, even on a
+ * button: tapping to silence the buzz must never start the second half or show a "Hold" hint instead.
+ */
+@Composable
+private fun AcknowledgeOnTap(content: @Composable () -> Unit) {
+    val context = LocalContext.current
+    val pending by MatchController.pendingAlert.collectAsState()
+    Box(Modifier.fillMaxSize()) {
+        content()
+        if (pending != null) {
+            Box(Modifier.fillMaxSize().clickable { MatchController.acknowledge(context) })
+        }
+    }
+}
+
+@Composable
+private fun HalftimeScreen(state: MatchState, ambient: Boolean, ambientTick: Int) {
+    val context = LocalContext.current
+    val preset = Presets.byId(state.presetId)
+    val now = rememberNow(state, ambient, ambientTick)
+    val remaining = preset.halftimeLengthMs - state.halftimeElapsedMs(now)
+    val over = remaining < 0
+    val pending by MatchController.pendingAlert.collectAsState()
+
+    // Two stacked buttons make this screen taller than the half screen; the top padding keeps the
+    // countdown clear of the time of day.
+    Column(
+        Modifier.fillMaxSize().padding(top = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            when {
+                ambient && over -> "+${-remaining / 60_000}'"
+                ambient -> "${(remaining + 59_999) / 60_000}'"
+                over -> "+${formatElapsed(-remaining)}"
+                else -> formatRemaining(remaining)
+            },
+            style = Tabular,
+            fontSize = 46.sp,
+            fontWeight = if (ambient) FontWeight.Light else FontWeight.Medium,
+            color = when {
+                ambient -> Color.LightGray
+                over -> OverTime
+                else -> Color.White
+            },
+        )
+        // Same spot as the half screen's checkpoint line, directly under the clock.
+        if (pending != null) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                val tint = if (ambient) Color.LightGray else Reached
+                PulsingCheck(animate = !ambient, tint = tint)
+                Text("Halftime over", style = MaterialTheme.typography.body1, fontWeight = FontWeight.Bold, color = tint)
+            }
+        } else {
+            Text("Halftime", style = MaterialTheme.typography.body1, color = Dim)
+        }
+        Text(
+            "1st half ${formatElapsed(state.endedHalfMs)}",
+            style = MaterialTheme.typography.caption1.merge(Tabular),
+            color = Dim,
+        )
+        if (!ambient) {
+            Spacer(Modifier.height(10.dp))
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                CompactChip(
+                    onClick = { MatchController.startSecondHalf(context) },
+                    label = { Text("Start 2nd half") },
+                    colors = ChipDefaults.primaryChipColors(),
+                )
+                HoldButton("End match") { MatchController.newMatch(context) }
+            }
+        }
+    }
 }
 
 @Composable

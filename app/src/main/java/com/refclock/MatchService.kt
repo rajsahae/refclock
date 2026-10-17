@@ -18,6 +18,7 @@ import androidx.wear.ongoing.OngoingActivity
 import androidx.wear.ongoing.Status
 import com.refclock.match.MatchState
 import com.refclock.match.Phase
+import com.refclock.match.Presets
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -90,14 +91,20 @@ class MatchService : Service() {
             .setSilent(true)
             .setContentIntent(openApp)
 
-        val status = if (state.phase == Phase.RUNNING) {
-            Status.Builder()
+        val status = when (state.phase) {
+            Phase.RUNNING -> Status.Builder()
                 .addTemplate("#half# #clock#")
                 .addPart("half", Status.TextPart(halfLabel))
                 .addPart("clock", Status.StopwatchPart(state.clockZero))
                 .build()
-        } else {
-            Status.Builder().addTemplate(text).build()
+            Phase.HALFTIME -> Status.Builder()
+                .addTemplate("HT #clock#")
+                .addPart(
+                    "clock",
+                    Status.TimerPart(state.halftimeStartedAt + Presets.byId(state.presetId).halftimeLengthMs),
+                )
+                .build()
+            else -> Status.Builder().addTemplate(text).build()
         }
         OngoingActivity.Builder(applicationContext, NOTIFICATION_ID, builder)
             .setStaticIcon(R.drawable.ic_stat_clock)

@@ -47,6 +47,22 @@ class MatchStateTest {
     }
 
     @Test
+    fun halftimeClockRunsFromEndOfFirstHalfOnly() {
+        val halftime = MatchState(presetId = preset.id).kickOff(0).endHalf(26 * min)
+        assertEquals(3 * min, halftime.halftimeElapsedMs(29 * min))
+        assertEquals(0, halftime.startSecondHalf(31 * min).halftimeElapsedMs(32 * min))
+        assertEquals(5 * min, preset.halftimeAlert.atMs)
+    }
+
+    @Test
+    fun secondHalfEndDoesNotRestartHalftime() {
+        val finished = MatchState(presetId = preset.id).kickOff(0).endHalf(30 * min)
+            .startSecondHalf(35 * min).endHalf(65 * min)
+        assertEquals(30 * min, finished.halftimeStartedAt)
+        assertEquals(0, finished.halftimeElapsedMs(66 * min))
+    }
+
+    @Test
     fun nextAlertSkipsPassedCheckpoints() {
         assertEquals("Quarter break", preset.nextAlert(0)?.label)
         assertTrue(preset.nextAlert(15 * min)!!.isHalfEnd)

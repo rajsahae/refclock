@@ -72,6 +72,7 @@ object MatchController {
         putLong("pausedTotalMs", s.pausedTotalMs)
         putLong("pausedAt", s.pausedAt)
         putLong("endedHalfMs", s.endedHalfMs)
+        putLong("halftimeStartedAt", s.halftimeStartedAt)
         putInt("bootCount", bootCount)
     }
 
@@ -79,6 +80,7 @@ object MatchController {
         val phase = prefs.getString("phase", null)
             ?.let { name -> Phase.entries.firstOrNull { it.name == name } }
             ?: return MatchState()
+        val now = SystemClock.elapsedRealtime()
         val s = MatchState(
             phase = phase,
             presetId = Presets.byId(prefs.getString("presetId", null)).id,
@@ -87,11 +89,19 @@ object MatchController {
             pausedTotalMs = prefs.getLong("pausedTotalMs", 0),
             pausedAt = prefs.getLong("pausedAt", 0),
             endedHalfMs = prefs.getLong("endedHalfMs", 0),
+            // Missing when the halftime was saved by a version without the halftime clock.
+            halftimeStartedAt = prefs.getLong("halftimeStartedAt", now),
         )
         // elapsedRealtime() restarts at boot, so a half that was running before a reboot can't be recovered.
         // BOOT_COUNT can read 0 on some builds; a start time in the future is a reboot regardless.
         val rebooted = prefs.getInt("bootCount", bootCount) != bootCount ||
-            s.halfStartedAt > SystemClock.elapsedRealtime()
-        return if (rebooted && (phase == Phase.RUNNING || phase == Phase.PAUSED)) s.newMatch() else s
+            s.halfStartedAt > now
+        return when {
+            !rebooted -> s
+            phase == Phase.RUNNING || phase == Phase.PAUSED -> s.newMatch()
+            // The first half's result survives a reboot; only the halftime clock has to start over.
+            phase == Phase.HALFTIME -> s.copy(halftimeStartedAt = now)
+            else -> s
+        }
     }
 }

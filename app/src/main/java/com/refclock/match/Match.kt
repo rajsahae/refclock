@@ -2,20 +2,29 @@ package com.refclock.match
 
 data class Checkpoint(val atMs: Long, val label: String)
 
-data class Alert(val atMs: Long, val label: String, val isHalfEnd: Boolean)
+enum class AlertKind { CHECKPOINT, HALF_END, HALFTIME_END }
+
+/** [atMs] is on the half clock, or for [AlertKind.HALFTIME_END] on the halftime clock. */
+data class Alert(val atMs: Long, val label: String, val kind: AlertKind) {
+    val isHalfEnd: Boolean get() = kind == AlertKind.HALF_END
+}
 
 data class Preset(
     val id: String,
     val name: String,
     val halfLengthMs: Long,
+    val halftimeLengthMs: Long,
     val checkpoints: List<Checkpoint>,
     /** Listed only while the watch has Developer options turned on. */
     val devOnly: Boolean = false,
 ) {
+    /** Alerts during a half, in order. */
     val alerts: List<Alert> =
-        (checkpoints.map { Alert(it.atMs, it.label, isHalfEnd = false) } +
-            Alert(halfLengthMs, "Half ends", isHalfEnd = true))
+        (checkpoints.map { Alert(it.atMs, it.label, AlertKind.CHECKPOINT) } +
+            Alert(halfLengthMs, "Half ends", AlertKind.HALF_END))
             .sortedBy { it.atMs }
+
+    val halftimeAlert = Alert(halftimeLengthMs, "Halftime over", AlertKind.HALFTIME_END)
 
     fun nextAlert(halfElapsedMs: Long): Alert? = alerts.firstOrNull { it.atMs > halfElapsedMs }
 }
@@ -35,6 +44,7 @@ data class MatchState(
     val pausedAt: Long = 0,
     /** Final clock of the half just ended, shown at halftime and full time. */
     val endedHalfMs: Long = 0,
+    val halftimeStartedAt: Long = 0,
 ) {
     val isActive: Boolean
         get() = phase == Phase.RUNNING || phase == Phase.PAUSED || phase == Phase.HALFTIME
@@ -49,6 +59,10 @@ data class MatchState(
         Phase.PAUSED -> pausedAt - clockZero
         Phase.HALFTIME, Phase.FINISHED -> endedHalfMs
     }.coerceAtLeast(0)
+
+    /** The match clock is stopped at halftime; this is the separate halftime clock. */
+    fun halftimeElapsedMs(now: Long): Long =
+        if (phase == Phase.HALFTIME) (now - halftimeStartedAt).coerceAtLeast(0) else 0
 
     /** Earlier halves count at their scheduled length, not as played. */
     fun gameElapsedMs(preset: Preset, now: Long): Long =
@@ -75,6 +89,7 @@ data class MatchState(
             copy(
                 phase = if (half == 1) Phase.HALFTIME else Phase.FINISHED,
                 endedHalfMs = halfElapsedMs(now),
+                halftimeStartedAt = if (half == 1) now else halftimeStartedAt,
             )
         } else this
 
