@@ -22,7 +22,7 @@ object ProfileStore {
         _profiles.value = read() ?: Profiles.defaults
     }
 
-    /** Saved profiles plus the built-in Test profile, which menus show only in developer mode. */
+    /** Saved profiles plus the built-in Test profile, which menus show only in debug builds. */
     fun byId(id: String): Profile? = (profiles.value + Profiles.test).firstOrNull { it.id == id }
 
     fun save(profile: Profile) = write(Profiles.withSaved(profiles.value, profile))

@@ -10,7 +10,7 @@ preset checkpoints (quarter break, half end) that vibrate the watch.
   wrist returns to the clock rather than the watch face.
 
 Default profiles live in `app/src/main/java/com/refclock/match/Profiles.kt`. "Test" is there for
-checking the vibrations quickly, and is listed only while Developer options are on.
+checking the vibrations quickly, and is listed only in debug builds.
 
 ## Build
 

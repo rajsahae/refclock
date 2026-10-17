@@ -1,7 +1,7 @@
 package com.refclock.ui
 
 import android.os.SystemClock
-import android.provider.Settings
+import android.content.pm.ApplicationInfo
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -213,10 +213,9 @@ private fun ProfilesRoute(onPicked: () -> Unit) {
 private fun rememberMenuProfiles(): List<Profile> {
     val context = LocalContext.current
     val saved by ProfileStore.profiles.collectAsState()
-    val developer = remember {
-        Settings.Global.getInt(context.contentResolver, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) != 0
-    }
-    return if (developer) saved + Profiles.test else saved
+    // Not the Developer options setting: on a real watch the system reports it to apps as off.
+    val debugBuild = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+    return if (debugBuild) saved + Profiles.test else saved
 }
 
 @Composable

@@ -11,8 +11,8 @@ data class Profile(
     val halftimeLengthMs: Long,
     /** The mid-half water break, or null for none. */
     val breakLengthMs: Long? = null,
-    /** Listed only while the watch has Developer options turned on. */
-    val devOnly: Boolean = false,
+    /** Listed only in debug builds, never in a store release. */
+    val debugOnly: Boolean = false,
 ) {
     /**
      * The clock keeps running through the break and both quarters get equal playing time, so the
@@ -50,7 +50,7 @@ object Profiles {
         halfLengthMs = 30_000,
         halftimeLengthMs = 15_000,
         breakLengthMs = 0,
-        devOnly = true,
+        debugOnly = true,
     )
 
     private fun ayso(id: String, name: String, halfMinutes: Int) = Profile(
