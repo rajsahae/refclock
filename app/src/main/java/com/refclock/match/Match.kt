@@ -26,6 +26,9 @@ data class MatchState(
     /** Final clock of the half just ended, shown at halftime and full time. */
     val endedHalfMs: Long = 0,
     val halftimeStartedAt: Long = 0,
+    /** For the Full time summary: the first half's final clock and how long halftime actually ran. */
+    val firstHalfMs: Long = 0,
+    val halftimeMs: Long = 0,
 ) {
     val isActive: Boolean
         get() = phase == Phase.RUNNING || phase == Phase.PAUSED || phase == Phase.HALFTIME
@@ -74,12 +77,16 @@ data class MatchState(
                 phase = if (half == 1) Phase.HALFTIME else Phase.FINISHED,
                 endedHalfMs = halfElapsedMs(now),
                 halftimeStartedAt = if (half == 1) now else halftimeStartedAt,
+                firstHalfMs = if (half == 1) halfElapsedMs(now) else firstHalfMs,
             )
         } else this
 
     fun startSecondHalf(now: Long) =
         if (phase == Phase.HALFTIME) {
-            copy(phase = Phase.RUNNING, half = 2, halfStartedAt = now, pausedTotalMs = 0)
+            copy(
+                phase = Phase.RUNNING, half = 2, halfStartedAt = now, pausedTotalMs = 0,
+                halftimeMs = halftimeElapsedMs(now),
+            )
         } else this
 
     fun newMatch() = MatchState(profileId = profileId)

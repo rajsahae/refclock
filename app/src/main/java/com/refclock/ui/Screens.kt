@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -125,18 +126,7 @@ private fun Screen(state: MatchState, ambient: Boolean, ambientTick: Int) = Ackn
         Phase.IDLE -> Unit // Drawn by RefClockApp, which owns the profile picker's state.
         Phase.RUNNING, Phase.PAUSED -> HalfScreen(state, ambient, ambientTick)
         Phase.HALFTIME -> HalftimeScreen(state, ambient, ambientTick)
-        Phase.FINISHED -> BreakScreen(
-            title = "Full time",
-            summary = "2nd half ${formatElapsed(state.endedHalfMs)}",
-            ambient = ambient,
-        ) {
-            val context = LocalContext.current
-            Chip(
-                onClick = { MatchController.newMatch(context) },
-                label = { Text("New match") },
-                colors = ChipDefaults.primaryChipColors(),
-            )
-        }
+        Phase.FINISHED -> FullTimeScreen(state, ambient)
     }
 }
 
@@ -350,6 +340,37 @@ private fun AcknowledgeOnTap(content: @Composable () -> Unit) {
 }
 
 @Composable
+private fun FullTimeScreen(state: MatchState, ambient: Boolean) {
+    val context = LocalContext.current
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("Full time", style = MaterialTheme.typography.title2)
+        Spacer(Modifier.height(6.dp))
+        val parts = listOf("1st half" to state.firstHalfMs, "Halftime" to state.halftimeMs, "2nd half" to state.endedHalfMs)
+        parts.forEach { (label, ms) -> SummaryRow(label, ms) }
+        // Sum the whole seconds each row shows, so the column always adds up on screen.
+        SummaryRow("Total", parts.sumOf { (_, ms) -> ms / 1000 * 1000 }, emphasized = true)
+        if (!ambient) {
+            Spacer(Modifier.height(10.dp))
+            Chip(
+                onClick = { MatchController.newMatch(context) },
+                label = { Text("New match") },
+                colors = ChipDefaults.primaryChipColors(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SummaryRow(label: String, ms: Long, emphasized: Boolean = false) {
+    val color = if (emphasized) Color.White else Dim
+    val weight = if (emphasized) FontWeight.Bold else FontWeight.Normal
+    Row(Modifier.width(150.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, style = MaterialTheme.typography.body2, color = color, fontWeight = weight)
+        Text(formatElapsed(ms), style = MaterialTheme.typography.body2.merge(Tabular), color = color, fontWeight = weight)
+    }
+}
+
+@Composable
 private fun HalftimeScreen(state: MatchState, ambient: Boolean, ambientTick: Int) {
     val context = LocalContext.current
     val now = rememberNow(state, ambient, ambientTick)
@@ -411,26 +432,6 @@ private fun HalftimeScreen(state: MatchState, ambient: Boolean, ambientTick: Int
                 )
                 HoldButton("End match") { MatchController.newMatch(context) }
             }
-        }
-    }
-}
-
-@Composable
-private fun BreakScreen(
-    title: String,
-    summary: String,
-    ambient: Boolean,
-    actions: @Composable () -> Unit,
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text(title, style = MaterialTheme.typography.title2)
-        Text(summary, style = MaterialTheme.typography.caption1.merge(Tabular), color = Dim)
-        if (!ambient) {
-            Spacer(Modifier.height(4.dp))
-            actions()
         }
     }
 }

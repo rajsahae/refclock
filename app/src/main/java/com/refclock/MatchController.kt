@@ -76,6 +76,8 @@ object MatchController {
         putLong("pausedAt", s.pausedAt)
         putLong("endedHalfMs", s.endedHalfMs)
         putLong("halftimeStartedAt", s.halftimeStartedAt)
+        putLong("firstHalfMs", s.firstHalfMs)
+        putLong("halftimeMs", s.halftimeMs)
         putInt("bootCount", bootCount)
     }
 
@@ -97,6 +99,8 @@ object MatchController {
             endedHalfMs = prefs.getLong("endedHalfMs", 0),
             // Missing when the halftime was saved by a version without the halftime clock.
             halftimeStartedAt = prefs.getLong("halftimeStartedAt", now),
+            firstHalfMs = prefs.getLong("firstHalfMs", 0),
+            halftimeMs = prefs.getLong("halftimeMs", 0),
         ).let { s ->
             val profile = prefs.getString("profile", null)?.let(Profiles::decode)
                 ?: ProfileStore.byId(s.profileId) ?: Profiles.defaults.first()

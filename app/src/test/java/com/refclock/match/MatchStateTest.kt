@@ -57,6 +57,15 @@ class MatchStateTest {
     }
 
     @Test
+    fun fullTimeSummaryHasEachHalfAndTheActualHalftime() {
+        val finished = MatchState().kickOff(0, profile).pause(10 * min).resume(11 * min).endHalf(32 * min)
+            .startSecondHalf(38 * min).endHalf(69 * min)
+        assertEquals(31 * min, finished.firstHalfMs) // 32 minutes minus the 1-minute pause
+        assertEquals(6 * min, finished.halftimeMs)
+        assertEquals(31 * min, finished.endedHalfMs)
+    }
+
+    @Test
     fun nextAlertSkipsPassedCheckpoints() {
         assertEquals("Quarter break", profile.nextAlert(0)?.label)
         assertTrue(profile.nextAlert(15 * min)!!.isHalfEnd)
