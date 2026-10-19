@@ -44,13 +44,13 @@ object MatchController {
 
     fun alertFired(context: Context, alert: Alert) {
         _pendingAlert.value = alert
-        Haptics.buzzUntilAcknowledged(context, alert, _state.value.half)
+        AlertPlayer.play(context, SettingsStore.settings.value.styleFor(alert.kind, _state.value.half))
     }
 
     fun acknowledge(context: Context) {
         if (_pendingAlert.value == null) return
         _pendingAlert.value = null
-        Haptics.stop(context)
+        AlertPlayer.stop(context)
     }
 
     private fun now() = SystemClock.elapsedRealtime()
