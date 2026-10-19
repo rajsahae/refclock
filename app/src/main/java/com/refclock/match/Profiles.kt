@@ -68,9 +68,38 @@ object Profiles {
             profiles + profile
         }
 
+    /** Brings back deleted defaults and reverts edits to them; custom profiles are kept, after them. */
+    fun withDefaultsRestored(profiles: List<Profile>): List<Profile> {
+        val defaultIds = defaults.map { it.id }.toSet()
+        return defaults + profiles.filterNot { it.id in defaultIds }
+    }
+
     /** The last profile can't be deleted: the setup screen always needs one to kick off with. */
     fun withDeleted(profiles: List<Profile>, id: String): List<Profile> =
         if (profiles.size <= 1) profiles else profiles.filterNot { it.id == id }
+
+    // Editor choices. Half and halftime lengths are whole minutes; the break goes in 30-second steps.
+    val halfLengthOptions = (1..60).map { it * MINUTE }
+    val halftimeLengthOptions = (1..20).map { it * MINUTE }
+
+    /** The break must be shorter than the half, or there'd be no playing time before it. */
+    fun breakLengthOptions(halfLengthMs: Long): List<Long> = (1..10).map { it * 30_000L }.filter { it < halfLengthMs }
+
+    fun newProfile(id: String) = Profile(
+        id = id,
+        name = "",
+        halfLengthMs = 25 * MINUTE,
+        halftimeLengthMs = 5 * MINUTE,
+        breakLengthMs = MINUTE,
+    )
+
+    /** Shortening the half may also shorten the break, to the longest length still allowed. */
+    fun withHalfLength(profile: Profile, halfLengthMs: Long): Profile = profile.copy(
+        halfLengthMs = halfLengthMs,
+        breakLengthMs = profile.breakLengthMs?.let { current ->
+            breakLengthOptions(halfLengthMs).lastOrNull { it <= current } ?: breakLengthOptions(halfLengthMs).first()
+        },
+    )
 
     private val json = Json { ignoreUnknownKeys = true }
 

@@ -29,7 +29,7 @@ object ProfileStore {
 
     fun delete(id: String) = write(Profiles.withDeleted(profiles.value, id))
 
-    fun resetToDefaults() = write(Profiles.defaults)
+    fun restoreDefaults() = write(Profiles.withDefaultsRestored(profiles.value))
 
     private fun read(): List<Profile>? =
         if (!file.baseFile.exists()) null

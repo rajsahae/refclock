@@ -36,4 +36,16 @@
     <string name="cd_quarter_break">Quarter break</string>
     <string name="cd_half_end">Half end</string>
     <string name="cd_game_end">Game end</string>
+    <string name="cd_edit_profile">Edit profile</string>
+    <string name="cd_new_profile">New profile</string>
+    <string name="cd_restore_defaults">Restore default profiles, hold</string>
+    <string name="cd_save">Save</string>
+    <string name="cd_delete_profile">Delete profile, hold</string>
+    <string name="cd_name">Name</string>
+    <string name="cd_half_length">Half length</string>
+    <string name="cd_halftime_length">Halftime length</string>
+    <string name="cd_break">Mid-half break</string>
+    <string name="cd_break_start">Break starts at</string>
+    <!-- Prompt shown by the watch keyboard when naming a profile. -->
+    <string name="profile_name_prompt">Profile name</string>
 </resources>

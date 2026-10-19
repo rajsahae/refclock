@@ -44,6 +44,7 @@ dependencies {
     implementation(libs.wear.compose.navigation)
     implementation(libs.androidx.wear)
     implementation(libs.androidx.wear.ongoing)
+    implementation(libs.androidx.wear.input)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
 

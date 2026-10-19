@@ -98,10 +98,10 @@ import com.refclock.match.formatRemaining
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private val Dim = Color(0xFF9E9E9E)
-private val OverTime = Color(0xFFFFB300)
-private val Reached = Color(0xFF80DEEA)
-private val Tabular = TextStyle(fontFeatureSettings = "tnum")
+internal val Dim = Color(0xFF9E9E9E)
+internal val OverTime = Color(0xFFFFB300)
+internal val Reached = Color(0xFF80DEEA)
+internal val Tabular = TextStyle(fontFeatureSettings = "tnum")
 
 /** How long a hold button must be held. Its ring fills over this time. */
 private const val HOLD_MS = 600
@@ -109,6 +109,9 @@ private const val HOLD_MS = 600
 private object Routes {
     const val MATCH = "match"
     const val PROFILES = "profiles"
+    const val EDITOR = "editor"
+    const val PICK = "pick/{field}"
+    fun pick(field: LengthField) = "pick/${field.name}"
 }
 
 @Composable
@@ -126,10 +129,23 @@ fun RefClockApp(ambient: Boolean, ambientTick: Int) {
                     }
                 }
                 composable(Routes.PROFILES) {
-                    ProfilesRoute {
-                        // Guarded: a second tap mustn't pop the match screen and leave nothing showing.
-                        if (navController.currentDestination?.route == Routes.PROFILES) navController.popBackStack()
-                    }
+                    ProfileListRoute(
+                        onPicked = {
+                            // Guarded: a second tap mustn't pop the match screen and leave nothing showing.
+                            if (navController.currentDestination?.route == Routes.PROFILES) navController.popBackStack()
+                        },
+                        onEdit = { navController.navigate(Routes.EDITOR) { launchSingleTop = true } },
+                    )
+                }
+                composable(Routes.EDITOR) {
+                    ProfileEditorRoute(
+                        onPick = { field -> navController.navigate(Routes.pick(field)) { launchSingleTop = true } },
+                        onDone = { navController.popBackStack(Routes.PROFILES, inclusive = false) },
+                    )
+                }
+                composable(Routes.PICK) { entry ->
+                    val field = entry.arguments?.getString("field")?.let { name -> LengthField.entries.firstOrNull { it.name == name } }
+                    if (field != null) LengthPickerRoute(field) { navController.popBackStack() }
                 }
             }
         }
@@ -174,8 +190,10 @@ private fun IdleScreen(state: MatchState, onChangeProfile: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(profile.name, style = MaterialTheme.typography.title2)
-        Text(halvesText(profile), style = MaterialTheme.typography.caption1, color = Dim)
+        Text(profileName(profile), style = MaterialTheme.typography.title2)
+        if (profile.name.isNotBlank()) {
+            Text(halvesText(profile), style = MaterialTheme.typography.caption1, color = Dim)
+        }
         Spacer(Modifier.height(4.dp))
         Button(
             onClick = { MatchController.kickOff(context) },
@@ -191,52 +209,7 @@ private fun IdleScreen(state: MatchState, onChangeProfile: () -> Unit) {
 }
 
 @Composable
-private fun halvesText(profile: Profile) = stringResource(R.string.halves, formatLength(profile.halfLengthMs))
-
-@Composable
-private fun ProfilesRoute(onPicked: () -> Unit) {
-    val context = LocalContext.current
-    val profiles = rememberMenuProfiles()
-    val listState = rememberScalingLazyListState()
-    // The time slides away as the list scrolls instead of overlapping its items.
-    Scaffold(timeText = { TimeText(Modifier.scrollAway(listState)) }) {
-        Box(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
-            ProfileList(profiles, listState) { profile ->
-                MatchController.selectProfile(context, profile.id)
-                onPicked()
-            }
-        }
-    }
-}
-
-@Composable
-private fun rememberMenuProfiles(): List<Profile> {
-    val context = LocalContext.current
-    val saved by ProfileStore.profiles.collectAsState()
-    // Not the Developer options setting: on a real watch the system reports it to apps as off.
-    val debugBuild = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
-    return if (debugBuild) saved + Profiles.test else saved
-}
-
-@Composable
-private fun ProfileList(profiles: List<Profile>, listState: ScalingLazyListState, onPick: (Profile) -> Unit) {
-    ScalingLazyColumn(Modifier.fillMaxSize(), state = listState) {
-        item {
-            ListHeader {
-                ButtonIcon(R.drawable.ic_list, stringResource(R.string.cd_profiles), size = 24.dp, tint = Dim)
-            }
-        }
-        items(profiles) { profile ->
-            Chip(
-                onClick = { onPick(profile) },
-                label = { Text(profile.name) },
-                secondaryLabel = { Text(halvesText(profile)) },
-                colors = ChipDefaults.secondaryChipColors(),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-    }
-}
+internal fun halvesText(profile: Profile) = stringResource(R.string.halves, formatLength(profile.halfLengthMs))
 
 @Composable
 private fun HalfScreen(state: MatchState, ambient: Boolean, ambientTick: Int) {
@@ -369,7 +342,7 @@ private fun ReachedAlert(alert: Alert, half: Int, ambient: Boolean) {
 }
 
 @Composable
-private fun ButtonIcon(
+internal fun ButtonIcon(
     @DrawableRes icon: Int,
     description: String,
     size: Dp = 24.dp,
@@ -540,7 +513,7 @@ private fun HalftimeScreen(state: MatchState, ambient: Boolean, ambientTick: Int
  * while held, which also shows a first-time user that holding is what it wants.
  */
 @Composable
-private fun HoldButton(@DrawableRes icon: Int, description: String, onHold: () -> Unit) {
+internal fun HoldButton(@DrawableRes icon: Int, description: String, onHold: () -> Unit) {
     val haptics = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     val progress = remember { Animatable(0f) }

@@ -57,4 +57,27 @@ class ProfilesTest {
         assertEquals(listOf(ayso12), Profiles.withDeleted(Profiles.defaults, ayso10.id))
         assertEquals(listOf(ayso12), Profiles.withDeleted(listOf(ayso12), ayso12.id))
     }
+
+    @Test
+    fun restoringDefaultsKeepsCustomProfiles() {
+        val custom = Profile("abc", "FIFA", 45 * min, 15 * min)
+        val edited = ayso10.copy(halfLengthMs = 20 * min)
+        assertEquals(Profiles.defaults + custom, Profiles.withDefaultsRestored(listOf(custom, edited)))
+    }
+
+    @Test
+    fun breakMustBeShorterThanTheHalf() {
+        assertEquals(listOf(30_000L), Profiles.breakLengthOptions(1 * min))
+        assertEquals(10, Profiles.breakLengthOptions(25 * min).size)
+        assertEquals(5 * min, Profiles.breakLengthOptions(25 * min).last())
+    }
+
+    @Test
+    fun shorteningTheHalfClampsTheBreak() {
+        val longBreak = ayso10.copy(breakLengthMs = 2 * min)
+        assertEquals(90_000L, Profiles.withHalfLength(longBreak, 2 * min).breakLengthMs)
+        assertEquals(30_000L, Profiles.withHalfLength(longBreak, 1 * min).breakLengthMs)
+        assertEquals(2 * min, Profiles.withHalfLength(longBreak, 40 * min).breakLengthMs)
+        assertNull(Profiles.withHalfLength(ayso10.copy(breakLengthMs = null), 1 * min).breakLengthMs)
+    }
 }
