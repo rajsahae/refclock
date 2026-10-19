@@ -13,7 +13,8 @@ class AlertSettingsTest {
         assertEquals(Pattern.LONG_2, s.styleFor(AlertKind.HALF_END, half = 1).pattern)
         assertEquals(Pattern.LONG_3, s.styleFor(AlertKind.HALF_END, half = 2).pattern)
         assertEquals(Pattern.SUSTAINED, s.styleFor(AlertKind.HALFTIME_END, half = 1).pattern)
-        assertTrue(AppSettings().run { listOf(quarterBreak, halfTime, fullTime, halftimeOver) }.none { it.beep })
+        val styles = AppSettings().run { listOf(quarterBreak, halfTime, fullTime, halftimeOver) }
+        assertTrue(styles.all { it.vibrate && !it.beep })
     }
 
     @Test
@@ -22,7 +23,6 @@ class AlertSettingsTest {
             listOf(Pulse(0, 800), Pulse(1100, 150), Pulse(1450, 150)),
             AlertTiming.pulses(Pattern.LONG_QUICK),
         )
-        assertEquals(emptyList<Pulse>(), AlertTiming.pulses(Pattern.OFF))
     }
 
     @Test
@@ -33,7 +33,7 @@ class AlertSettingsTest {
         assertEquals(Pulse(4500, 1500), repeated[1])
         val last = repeated.last()
         assertTrue(last.startMs + last.durationMs <= AlertTiming.CAP_MS)
-        assertEquals(emptyList<Pulse>(), AlertTiming.repeatedPulses(Pattern.OFF))
+        assertEquals(14, AlertTiming.repeats(Pattern.SUSTAINED))
     }
 
     @Test
@@ -48,5 +48,20 @@ class AlertSettingsTest {
         assertEquals(custom, AppSettings.decode(AppSettings.encode(custom)))
         assertNull(AppSettings.decode("""{"quarterBreak":{"pattern":"FUTURE_PATTERN"}}"""))
         assertEquals(AppSettings(), AppSettings.decode("{}"))
+    }
+
+    @Test
+    fun beepIsToneDuringPulsesAndSilenceBetween() {
+        val samples = BeepTone.cycle(Pattern.LONG_QUICK)
+        val perMs = BeepTone.SAMPLE_RATE / 1000.0
+        fun at(ms: Int) = samples[(ms * perMs).toInt()].toInt()
+        fun loudest(fromMs: Int, toMs: Int) = (((fromMs * perMs).toInt())..((toMs * perMs).toInt())).maxOf { kotlin.math.abs(samples[it].toInt()) }
+
+        assertEquals((AlertTiming.cycleMs(Pattern.LONG_QUICK) * perMs).toInt(), samples.size)
+        assertEquals(0, at(0)) // faded in, so the first pulse doesn't click
+        assertTrue(loudest(100, 200) > 10_000) // inside the first, long pulse
+        assertEquals(0, loudest(810, 1090)) // the 300 ms pause after it
+        assertTrue(loudest(1150, 1220) > 10_000) // the first quick pulse
+        assertEquals(0, loudest(1610, 4590)) // the gap before the next repeat
     }
 }

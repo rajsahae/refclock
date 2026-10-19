@@ -3,7 +3,7 @@ package com.refclock.match
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-/** Vibration patterns, as alternating on/off durations in ms, starting with "on". */
+/** An alert's rhythm, followed by the vibration and the beep alike: alternating on/off ms, starting "on". */
 enum class Pattern(internal val onOff: List<Long>) {
     QUICK_2(listOf(150, 250, 150)),
     QUICK_3(listOf(150, 250, 150, 250, 150)),
@@ -12,7 +12,6 @@ enum class Pattern(internal val onOff: List<Long>) {
     LONG_3(listOf(800, 300, 800, 300, 800)),
     SUSTAINED(listOf(1500)),
     LONG_QUICK(listOf(800, 300, 150, 200, 150)),
-    OFF(emptyList()),
 }
 
 data class Pulse(val startMs: Long, val durationMs: Long)
@@ -33,13 +32,17 @@ object AlertTiming {
         }
     }
 
-    /** The pattern repeated with [GAP_MS] between repeats, for as many whole repeats as fit in [capMs]. */
+    /** One repeat: the pattern, then [GAP_MS] of quiet. */
+    fun cycleMs(pattern: Pattern): Long = pattern.onOff.sum() + GAP_MS
+
+    /** As many whole repeats as fit in [capMs]; the last one's trailing gap may run past it. */
+    fun repeats(pattern: Pattern, capMs: Long = CAP_MS): Int =
+        ((capMs + GAP_MS) / cycleMs(pattern)).toInt().coerceAtLeast(1)
+
     fun repeatedPulses(pattern: Pattern, capMs: Long = CAP_MS): List<Pulse> {
         val once = pulses(pattern)
-        if (once.isEmpty()) return emptyList()
-        val cycle = pattern.onOff.sum() + GAP_MS
-        val repeats = ((capMs + GAP_MS) / cycle).coerceAtLeast(1)
-        return (0 until repeats).flatMap { r -> once.map { it.copy(startMs = it.startMs + r * cycle) } }
+        val cycle = cycleMs(pattern)
+        return (0 until repeats(pattern, capMs)).flatMap { r -> once.map { it.copy(startMs = it.startMs + r * cycle) } }
     }
 
     /** The vibrator's waveform format: alternating off/on durations, starting with "off". */
@@ -51,8 +54,9 @@ object AlertTiming {
     }
 }
 
+/** With both [vibrate] and [beep] off, the alert only shows on screen. */
 @Serializable
-data class AlertStyle(val pattern: Pattern, val beep: Boolean = false)
+data class AlertStyle(val pattern: Pattern, val vibrate: Boolean = true, val beep: Boolean = false)
 
 /** App-wide settings; the defaults are the patterns the app shipped with. */
 @Serializable
