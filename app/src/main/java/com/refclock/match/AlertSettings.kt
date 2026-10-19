@@ -54,6 +54,9 @@ object AlertTiming {
     }
 }
 
+/** The four alerts that can be set up separately. */
+enum class AlertSlot { QUARTER_BREAK, HALF_TIME, FULL_TIME, HALFTIME_OVER }
+
 /** With both [vibrate] and [beep] off, the alert only shows on screen. */
 @Serializable
 data class AlertStyle(val pattern: Pattern, val vibrate: Boolean = true, val beep: Boolean = false)
@@ -67,10 +70,26 @@ data class AppSettings(
     val halftimeOver: AlertStyle = AlertStyle(Pattern.SUSTAINED),
     val halftimeCountUp: Boolean = false,
 ) {
-    fun styleFor(kind: AlertKind, half: Int): AlertStyle = when (kind) {
-        AlertKind.CHECKPOINT -> quarterBreak
-        AlertKind.HALF_END -> if (half == 1) halfTime else fullTime
-        AlertKind.HALFTIME_END -> halftimeOver
+    fun styleFor(kind: AlertKind, half: Int): AlertStyle = style(
+        when (kind) {
+            AlertKind.CHECKPOINT -> AlertSlot.QUARTER_BREAK
+            AlertKind.HALF_END -> if (half == 1) AlertSlot.HALF_TIME else AlertSlot.FULL_TIME
+            AlertKind.HALFTIME_END -> AlertSlot.HALFTIME_OVER
+        },
+    )
+
+    fun style(slot: AlertSlot): AlertStyle = when (slot) {
+        AlertSlot.QUARTER_BREAK -> quarterBreak
+        AlertSlot.HALF_TIME -> halfTime
+        AlertSlot.FULL_TIME -> fullTime
+        AlertSlot.HALFTIME_OVER -> halftimeOver
+    }
+
+    fun withStyle(slot: AlertSlot, style: AlertStyle): AppSettings = when (slot) {
+        AlertSlot.QUARTER_BREAK -> copy(quarterBreak = style)
+        AlertSlot.HALF_TIME -> copy(halfTime = style)
+        AlertSlot.FULL_TIME -> copy(fullTime = style)
+        AlertSlot.HALFTIME_OVER -> copy(halftimeOver = style)
     }
 
     companion object {

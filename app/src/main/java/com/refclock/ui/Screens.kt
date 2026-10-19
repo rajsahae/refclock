@@ -85,9 +85,11 @@ import androidx.wear.compose.navigation.composable
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
 import com.refclock.MatchController
 import com.refclock.ProfileStore
+import com.refclock.SettingsStore
 import com.refclock.R
 import com.refclock.match.Alert
 import com.refclock.match.AlertKind
+import com.refclock.match.AlertSlot
 import com.refclock.match.MatchState
 import com.refclock.match.Phase
 import com.refclock.match.Profile
@@ -112,6 +114,9 @@ private object Routes {
     const val EDITOR = "editor"
     const val PICK = "pick/{field}"
     fun pick(field: LengthField) = "pick/${field.name}"
+    const val SETTINGS = "settings"
+    const val ALERT = "alert/{slot}"
+    fun alert(slot: AlertSlot) = "alert/${slot.name}"
 }
 
 @Composable
@@ -124,9 +129,12 @@ fun RefClockApp(ambient: Boolean, ambientTick: Int) {
         Box(Modifier.fillMaxSize().background(Color.Black).offset { shift }) {
             SwipeDismissableNavHost(navController = navController, startDestination = Routes.MATCH) {
                 composable(Routes.MATCH) {
-                    MatchRoute(ambient, ambientTick) {
-                        navController.navigate(Routes.PROFILES) { launchSingleTop = true }
-                    }
+                    MatchRoute(
+                        ambient,
+                        ambientTick,
+                        onChangeProfile = { navController.navigate(Routes.PROFILES) { launchSingleTop = true } },
+                        onSettings = { navController.navigate(Routes.SETTINGS) { launchSingleTop = true } },
+                    )
                 }
                 composable(Routes.PROFILES) {
                     ProfileListRoute(
@@ -147,29 +155,36 @@ fun RefClockApp(ambient: Boolean, ambientTick: Int) {
                     val field = entry.arguments?.getString("field")?.let { name -> LengthField.entries.firstOrNull { it.name == name } }
                     if (field != null) LengthPickerRoute(field) { navController.popBackStack() }
                 }
+                composable(Routes.SETTINGS) {
+                    SettingsRoute { slot -> navController.navigate(Routes.alert(slot)) { launchSingleTop = true } }
+                }
+                composable(Routes.ALERT) { entry ->
+                    val slot = entry.arguments?.getString("slot")?.let { name -> AlertSlot.entries.firstOrNull { it.name == name } }
+                    if (slot != null) AlertSettingsRoute(slot)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun MatchRoute(ambient: Boolean, ambientTick: Int, onChangeProfile: () -> Unit) {
+private fun MatchRoute(ambient: Boolean, ambientTick: Int, onChangeProfile: () -> Unit, onSettings: () -> Unit) {
     val state by MatchController.state.collectAsState()
     Scaffold(timeText = { TimeText() }) {
         Box(
             Modifier.fillMaxSize().padding(horizontal = 12.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Screen(state, ambient, ambientTick, onChangeProfile)
+            Screen(state, ambient, ambientTick, onChangeProfile, onSettings)
         }
     }
 }
 
 @Composable
-private fun Screen(state: MatchState, ambient: Boolean, ambientTick: Int, onChangeProfile: () -> Unit) =
+private fun Screen(state: MatchState, ambient: Boolean, ambientTick: Int, onChangeProfile: () -> Unit, onSettings: () -> Unit) =
     AcknowledgeOnTap {
         when (state.phase) {
-            Phase.IDLE -> IdleScreen(state, onChangeProfile)
+            Phase.IDLE -> IdleScreen(state, onChangeProfile, onSettings)
             Phase.RUNNING, Phase.PAUSED -> HalfScreen(state, ambient, ambientTick)
             Phase.HALFTIME -> HalftimeScreen(state, ambient, ambientTick)
             Phase.FINISHED -> FullTimeScreen(state, ambient)
@@ -177,7 +192,7 @@ private fun Screen(state: MatchState, ambient: Boolean, ambientTick: Int, onChan
     }
 
 @Composable
-private fun IdleScreen(state: MatchState, onChangeProfile: () -> Unit) {
+private fun IdleScreen(state: MatchState, onChangeProfile: () -> Unit, onSettings: () -> Unit) {
     val context = LocalContext.current
     val profiles = rememberMenuProfiles()
     val profile = profiles.firstOrNull { it.id == state.profileId } ?: profiles.first()
@@ -202,8 +217,13 @@ private fun IdleScreen(state: MatchState, onChangeProfile: () -> Unit) {
         ) {
             ButtonIcon(R.drawable.ic_play, stringResource(R.string.cd_kick_off), size = 32.dp)
         }
-        CompactButton(onClick = onChangeProfile, colors = ButtonDefaults.secondaryButtonColors()) {
-            ButtonIcon(R.drawable.ic_list, stringResource(R.string.cd_change_profile), size = 20.dp)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            CompactButton(onClick = onChangeProfile, colors = ButtonDefaults.secondaryButtonColors()) {
+                ButtonIcon(R.drawable.ic_list, stringResource(R.string.cd_change_profile), size = 20.dp)
+            }
+            CompactButton(onClick = onSettings, colors = ButtonDefaults.secondaryButtonColors()) {
+                ButtonIcon(R.drawable.ic_settings, stringResource(R.string.cd_settings), size = 20.dp)
+            }
         }
     }
 }
@@ -299,7 +319,7 @@ private fun StatusLine(height: Dp, content: @Composable () -> Unit) {
 
 /** Filled dots for halves started: one in the first half, two in the second. */
 @Composable
-private fun HalfDots(half: Int, color: Color = Dim) {
+internal fun HalfDots(half: Int, color: Color = Dim) {
     val description = stringResource(if (half == 1) R.string.cd_first_half else R.string.cd_second_half)
     Row(
         Modifier.semantics { contentDescription = description },
@@ -458,9 +478,12 @@ private fun SummaryRow(ms: Long, emphasized: Boolean = false, label: @Composable
 private fun HalftimeScreen(state: MatchState, ambient: Boolean, ambientTick: Int) {
     val context = LocalContext.current
     val now = rememberNow(state, ambient, ambientTick)
-    val remaining = state.profile.halftimeLengthMs - state.halftimeElapsedMs(now)
+    val elapsed = state.halftimeElapsedMs(now)
+    val length = state.profile.halftimeLengthMs
+    val remaining = length - elapsed
     val over = remaining < 0
     val pending by MatchController.pendingAlert.collectAsState()
+    val countUp = SettingsStore.settings.collectAsState().value.halftimeCountUp
 
     Column(
         Modifier.fillMaxSize(),
@@ -469,6 +492,8 @@ private fun HalftimeScreen(state: MatchState, ambient: Boolean, ambientTick: Int
     ) {
         Text(
             when {
+                countUp && ambient -> "${elapsed / 60_000}'"
+                countUp -> formatElapsed(elapsed)
                 ambient && over -> "+${-remaining / 60_000}'"
                 ambient -> "${(remaining + 59_999) / 60_000}'"
                 over -> "+${formatElapsed(-remaining)}"
@@ -489,7 +514,13 @@ private fun HalftimeScreen(state: MatchState, ambient: Boolean, ambientTick: Int
             if (alert != null) {
                 ReachedAlert(alert, state.half, ambient)
             } else {
-                Text(stringResource(R.string.halftime_short), style = MaterialTheme.typography.body1, color = Dim)
+                // Counting up, the target goes here instead, since the clock no longer shows it.
+                val label = stringResource(R.string.halftime_short)
+                Text(
+                    if (countUp) "$label ${formatElapsed(length)}" else label,
+                    style = MaterialTheme.typography.body1.merge(Tabular),
+                    color = Dim,
+                )
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {

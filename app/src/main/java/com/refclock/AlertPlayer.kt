@@ -5,6 +5,8 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.VibrationAttributes
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -16,15 +18,26 @@ import com.refclock.match.BeepTone
 /** Plays an alert's pattern, repeating until it's acknowledged or the cap runs out. Main thread only. */
 object AlertPlayer {
     private var beep: AudioTrack? = null
+    private val handler = Handler(Looper.getMainLooper())
 
     fun play(context: Context, style: AlertStyle, capMs: Long = AlertTiming.CAP_MS) {
         stop(context)
         if (style.vibrate) vibrate(context, AlertTiming.waveform(AlertTiming.repeatedPulses(style.pattern, capMs)))
-        if (style.beep) beep = startBeep(BeepTone.cycle(style.pattern), AlertTiming.repeats(style.pattern, capMs))
+        if (style.beep) {
+            val repeats = AlertTiming.repeats(style.pattern, capMs)
+            val track = startBeep(BeepTone.cycle(style.pattern), repeats)
+            beep = track
+            // A static track reports "playing" after its last sample until stopped, so release it once done.
+            handler.postDelayed({ if (beep === track) releaseBeep() }, repeats * AlertTiming.cycleMs(style.pattern))
+        }
     }
 
     fun stop(context: Context) {
         vibrator(context).cancel()
+        releaseBeep()
+    }
+
+    private fun releaseBeep() {
         beep?.let {
             runCatching { it.stop() }
             it.release()

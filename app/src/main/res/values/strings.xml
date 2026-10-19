@@ -46,6 +46,22 @@
     <string name="cd_halftime_length">Halftime length</string>
     <string name="cd_break">Mid-half break</string>
     <string name="cd_break_start">Break starts at</string>
+    <string name="cd_settings">Settings</string>
+    <string name="cd_vibrate">Vibrate</string>
+    <string name="cd_beep">Beep</string>
+    <string name="cd_preview">Preview</string>
+    <string name="cd_halftime_count_up">Count halftime up</string>
+    <string name="cd_slot_half_time">Half time</string>
+    <string name="cd_slot_full_time">Full time</string>
+    <string name="cd_slot_halftime_over">Halftime over</string>
+    <string name="cd_selected">Selected</string>
+    <string name="pattern_quick_2">Two quick pulses</string>
+    <string name="pattern_quick_3">Three quick pulses</string>
+    <string name="pattern_quick_4">Four quick pulses</string>
+    <string name="pattern_long_2">Two long pulses</string>
+    <string name="pattern_long_3">Three long pulses</string>
+    <string name="pattern_sustained">One sustained pulse</string>
+    <string name="pattern_long_quick">One long and two quick pulses</string>
     <!-- Prompt shown by the watch keyboard when naming a profile. -->
     <string name="profile_name_prompt">Profile name</string>
 </resources>

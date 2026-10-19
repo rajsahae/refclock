@@ -64,4 +64,16 @@ class AlertSettingsTest {
         assertTrue(loudest(1150, 1220) > 10_000) // the first quick pulse
         assertEquals(0, loudest(1610, 4590)) // the gap before the next repeat
     }
+
+    @Test
+    fun eachSlotIsSetIndependently() {
+        val beepy = AlertStyle(Pattern.QUICK_2, vibrate = false, beep = true)
+        val s = AppSettings().withStyle(AlertSlot.FULL_TIME, beepy)
+        assertEquals(beepy, s.style(AlertSlot.FULL_TIME))
+        assertEquals(beepy, s.styleFor(AlertKind.HALF_END, half = 2))
+        assertEquals(AppSettings().halfTime, s.styleFor(AlertKind.HALF_END, half = 1))
+        AlertSlot.entries.filter { it != AlertSlot.FULL_TIME }.forEach {
+            assertEquals(AppSettings().style(it), s.style(it))
+        }
+    }
 }
