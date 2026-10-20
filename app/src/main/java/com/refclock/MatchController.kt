@@ -31,13 +31,12 @@ object MatchController {
         bootCount = Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, 0)
         val (loaded, rebooted) = load()
         _state.value = loaded
-        // Alarms and the saved boot count don't survive a reboot. Save now so later starts don't redo the
-        // adjustment, and reschedule so a match resumed at halftime still gets its alert. The service is
-        // restarted by MainActivity: Android may refuse it from here if the app was started in the background.
-        if (rebooted) {
-            save(loaded)
-            AlertScheduler.schedule(context.applicationContext, loaded)
-        }
+        // The saved boot count must be updated after a reboot, or every later start would redo the adjustment.
+        if (rebooted) save(loaded)
+        // Alarms are lost to a reboot or a force stop while the saved match carries on, so reschedule on
+        // every start; it's idempotent. The service is restarted by MainActivity, since Android may refuse
+        // it from here if the app was started in the background.
+        AlertScheduler.schedule(context.applicationContext, loaded)
     }
 
     fun selectProfile(context: Context, id: String) = update(context) { it.selectProfile(id) }

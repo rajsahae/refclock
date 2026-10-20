@@ -20,7 +20,12 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            optimization {
+                enable = true
+            }
+            // Until there's an upload key for the Play Store: lets a release build install over a
+            // debug one, keeping its profiles and settings.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -43,6 +48,8 @@ dependencies {
     implementation(libs.wear.compose.foundation)
     implementation(libs.wear.compose.navigation)
     implementation(libs.androidx.wear)
+    // androidx.wear pulls in Fragment 1.2.4, which mishandles the permission request in MainActivity.
+    implementation(libs.androidx.fragment)
     implementation(libs.androidx.wear.ongoing)
     implementation(libs.androidx.wear.input)
     implementation(libs.kotlinx.coroutines.android)
