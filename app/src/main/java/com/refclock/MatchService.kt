@@ -1,5 +1,6 @@
 package com.refclock
 
+import android.app.ForegroundServiceStartNotAllowedException
 import android.app.Notification
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -124,7 +125,14 @@ class MatchService : Service() {
         private const val NOTIFICATION_ID = 1
 
         fun start(context: Context) {
-            ContextCompat.startForegroundService(context, Intent(context, MatchService::class.java))
+            try {
+                ContextCompat.startForegroundService(context, Intent(context, MatchService::class.java))
+            } catch (e: IllegalStateException) {
+                // Android 12+ refuses if the app isn't quite in the foreground yet, e.g. the screen turned
+                // off as it opened. Skipping is harmless: alarms don't depend on the service, and the next
+                // MainActivity.onStart or match action retries.
+                if (Build.VERSION.SDK_INT < 31 || e !is ForegroundServiceStartNotAllowedException) throw e
+            }
         }
     }
 }
