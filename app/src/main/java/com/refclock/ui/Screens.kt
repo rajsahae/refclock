@@ -129,12 +129,9 @@ fun RefClockApp(ambient: Boolean, ambientTick: Int) {
         Box(Modifier.fillMaxSize().background(Color.Black).offset { shift }) {
             SwipeDismissableNavHost(navController = navController, startDestination = Routes.MATCH) {
                 composable(Routes.MATCH) {
-                    MatchRoute(
-                        ambient,
-                        ambientTick,
-                        onChangeProfile = { navController.navigate(Routes.PROFILES) { launchSingleTop = true } },
-                        onSettings = { navController.navigate(Routes.SETTINGS) { launchSingleTop = true } },
-                    )
+                    MatchRoute(ambient, ambientTick) {
+                        navController.navigate(Routes.PROFILES) { launchSingleTop = true }
+                    }
                 }
                 composable(Routes.PROFILES) {
                     ProfileListRoute(
@@ -143,6 +140,7 @@ fun RefClockApp(ambient: Boolean, ambientTick: Int) {
                             if (navController.currentDestination?.route == Routes.PROFILES) navController.popBackStack()
                         },
                         onEdit = { navController.navigate(Routes.EDITOR) { launchSingleTop = true } },
+                        onSettings = { navController.navigate(Routes.SETTINGS) { launchSingleTop = true } },
                     )
                 }
                 composable(Routes.EDITOR) {
@@ -168,23 +166,23 @@ fun RefClockApp(ambient: Boolean, ambientTick: Int) {
 }
 
 @Composable
-private fun MatchRoute(ambient: Boolean, ambientTick: Int, onChangeProfile: () -> Unit, onSettings: () -> Unit) {
+private fun MatchRoute(ambient: Boolean, ambientTick: Int, onChangeProfile: () -> Unit) {
     val state by MatchController.state.collectAsState()
     Scaffold(timeText = { TimeText() }) {
         Box(
             Modifier.fillMaxSize().padding(horizontal = 12.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Screen(state, ambient, ambientTick, onChangeProfile, onSettings)
+            Screen(state, ambient, ambientTick, onChangeProfile)
         }
     }
 }
 
 @Composable
-private fun Screen(state: MatchState, ambient: Boolean, ambientTick: Int, onChangeProfile: () -> Unit, onSettings: () -> Unit) =
+private fun Screen(state: MatchState, ambient: Boolean, ambientTick: Int, onChangeProfile: () -> Unit) =
     AcknowledgeOnTap {
         when (state.phase) {
-            Phase.IDLE -> IdleScreen(state, onChangeProfile, onSettings)
+            Phase.IDLE -> IdleScreen(state, onChangeProfile)
             Phase.RUNNING, Phase.PAUSED -> HalfScreen(state, ambient, ambientTick)
             Phase.HALFTIME -> HalftimeScreen(state, ambient, ambientTick)
             Phase.FINISHED -> FullTimeScreen(state, ambient)
@@ -192,7 +190,7 @@ private fun Screen(state: MatchState, ambient: Boolean, ambientTick: Int, onChan
     }
 
 @Composable
-private fun IdleScreen(state: MatchState, onChangeProfile: () -> Unit, onSettings: () -> Unit) {
+private fun IdleScreen(state: MatchState, onChangeProfile: () -> Unit) {
     val context = LocalContext.current
     val profiles = rememberMenuProfiles()
     val profile = profiles.firstOrNull { it.id == state.profileId } ?: profiles.first()
@@ -217,13 +215,8 @@ private fun IdleScreen(state: MatchState, onChangeProfile: () -> Unit, onSetting
         ) {
             ButtonIcon(R.drawable.ic_play, stringResource(R.string.cd_kick_off), size = 32.dp)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CompactButton(onClick = onChangeProfile, colors = ButtonDefaults.secondaryButtonColors()) {
-                ButtonIcon(R.drawable.ic_list, stringResource(R.string.cd_change_profile), size = 20.dp)
-            }
-            CompactButton(onClick = onSettings, colors = ButtonDefaults.secondaryButtonColors()) {
-                ButtonIcon(R.drawable.ic_settings, stringResource(R.string.cd_settings), size = 20.dp)
-            }
+        CompactButton(onClick = onChangeProfile, colors = ButtonDefaults.secondaryButtonColors()) {
+            ButtonIcon(R.drawable.ic_list, stringResource(R.string.cd_change_profile), size = 20.dp)
         }
     }
 }

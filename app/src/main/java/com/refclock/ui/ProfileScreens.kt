@@ -92,7 +92,7 @@ internal fun rememberMenuProfiles(): List<Profile> {
 }
 
 @Composable
-internal fun ProfileListRoute(onPicked: () -> Unit, onEdit: () -> Unit) {
+internal fun ProfileListRoute(onPicked: () -> Unit, onEdit: () -> Unit, onSettings: () -> Unit) {
     val context = LocalContext.current
     val profiles = rememberMenuProfiles()
     val listState = rememberScalingLazyListState()
@@ -150,6 +150,10 @@ internal fun ProfileListRoute(onPicked: () -> Unit, onEdit: () -> Unit) {
                         colors = ButtonDefaults.primaryButtonColors(),
                     ) {
                         ButtonIcon(R.drawable.ic_add, stringResource(R.string.cd_new_profile))
+                    }
+                    // Settings apply to every profile, so they live with the list rather than on one profile.
+                    Button(onClick = onSettings, colors = ButtonDefaults.secondaryButtonColors()) {
+                        ButtonIcon(R.drawable.ic_settings, stringResource(R.string.cd_settings))
                     }
                     HoldButton(R.drawable.ic_restore, stringResource(R.string.cd_restore_defaults)) {
                         ProfileStore.restoreDefaults()
