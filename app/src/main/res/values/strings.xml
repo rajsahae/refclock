@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Ref Clock</string>
+    <string name="app_name">RefClock</string>
     <string name="channel_match">Match in progress</string>
 
     <!-- Short labels shown on screen. HT/FT are the usual soccer abbreviations. -->

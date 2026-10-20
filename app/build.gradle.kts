@@ -11,7 +11,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.refclock"
+        applicationId = "io.github.rajsahae.refclock"
         minSdk = 30
         targetSdk = 37
         versionCode = 1
