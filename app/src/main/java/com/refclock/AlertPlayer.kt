@@ -25,10 +25,13 @@ object AlertPlayer {
         if (style.vibrate) vibrate(context, AlertTiming.waveform(AlertTiming.repeatedPulses(style.pattern, capMs)))
         if (style.beep) {
             val repeats = AlertTiming.repeats(style.pattern, capMs)
-            val track = startBeep(BeepTone.cycle(style.pattern), repeats)
-            beep = track
-            // A static track reports "playing" after its last sample until stopped, so release it once done.
-            handler.postDelayed({ if (beep === track) releaseBeep() }, repeats * AlertTiming.cycleMs(style.pattern))
+            // This runs as the alert fires: if the audio system refuses a track, lose the beep, not the
+            // alert. The vibration and the on-screen check still work.
+            runCatching { startBeep(BeepTone.cycle(style.pattern), repeats) }.onSuccess { track ->
+                beep = track
+                // A static track reports "playing" after its last sample until stopped, so release it once done.
+                handler.postDelayed({ if (beep === track) releaseBeep() }, repeats * AlertTiming.cycleMs(style.pattern))
+            }
         }
     }
 
@@ -82,9 +85,14 @@ object AlertPlayer {
             .setTransferMode(AudioTrack.MODE_STATIC)
             .setBufferSizeInBytes(cycle.size * 2)
             .build()
-        track.write(cycle, 0, cycle.size)
-        if (repeats > 1) track.setLoopPoints(0, cycle.size, repeats - 1)
-        track.play()
+        try {
+            track.write(cycle, 0, cycle.size)
+            if (repeats > 1) track.setLoopPoints(0, cycle.size, repeats - 1)
+            track.play()
+        } catch (e: RuntimeException) {
+            track.release()
+            throw e
+        }
         return track
     }
 

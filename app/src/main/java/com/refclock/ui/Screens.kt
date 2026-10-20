@@ -59,6 +59,8 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -151,7 +153,12 @@ fun RefClockApp(ambient: Boolean, ambientTick: Int) {
                 }
                 composable(Routes.PICK) { entry ->
                     val field = entry.arguments?.getString("field")?.let { name -> LengthField.entries.firstOrNull { it.name == name } }
-                    if (field != null) LengthPickerRoute(field) { navController.popBackStack() }
+                    if (field != null) {
+                        LengthPickerRoute(field) {
+                            // Guarded like the profile list: a second tap mustn't also pop the editor.
+                            if (navController.currentDestination?.route == Routes.PICK) navController.popBackStack()
+                        }
+                    }
                 }
                 composable(Routes.SETTINGS) {
                     SettingsRoute { slot -> navController.navigate(Routes.alert(slot)) { launchSingleTop = true } }
@@ -203,7 +210,16 @@ private fun IdleScreen(state: MatchState, onChangeProfile: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(profileName(profile), style = MaterialTheme.typography.title2)
+        // Names are free text: long ones drop a size and wrap to a second line, kept clear of the round edge.
+        val name = profileName(profile)
+        Text(
+            name,
+            Modifier.padding(horizontal = 20.dp),
+            style = if (name.length <= 12) MaterialTheme.typography.title2 else MaterialTheme.typography.title3,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
         if (profile.name.isNotBlank()) {
             Text(halvesText(profile), style = MaterialTheme.typography.caption1, color = Dim)
         }

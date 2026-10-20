@@ -53,4 +53,11 @@ class MainActivity : ComponentActivity() {
 
         setContent { RefClockApp(ambient = ambient, ambientTick = ambientTick) }
     }
+
+    override fun onStart() {
+        super.onStart()
+        // Brings back the service, and with it the watch-face indicator, if a match outlived it, such as
+        // after a reboot at halftime. Starting it from the app on screen is always allowed.
+        if (MatchController.state.value.isActive) MatchService.start(this)
+    }
 }

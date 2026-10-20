@@ -100,7 +100,11 @@ class MatchService : Service() {
                 .addTemplate(getString(R.string.halftime_short) + " #clock#")
                 .addPart(
                     "clock",
-                    Status.TimerPart(state.halftimeStartedAt + state.profile.halftimeLengthMs),
+                    if (SettingsStore.settings.value.halftimeCountUp) {
+                        Status.StopwatchPart(state.halftimeStartedAt)
+                    } else {
+                        Status.TimerPart(state.halftimeStartedAt + state.profile.halftimeLengthMs)
+                    },
                 )
                 .build()
             else -> Status.Builder().addTemplate(text).build()

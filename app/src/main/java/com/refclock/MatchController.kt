@@ -29,7 +29,15 @@ object MatchController {
     fun init(context: Context) {
         prefs = context.getSharedPreferences("match", Context.MODE_PRIVATE)
         bootCount = Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, 0)
-        _state.value = load()
+        val (loaded, rebooted) = load()
+        _state.value = loaded
+        // Alarms and the saved boot count don't survive a reboot. Save now so later starts don't redo the
+        // adjustment, and reschedule so a match resumed at halftime still gets its alert. The service is
+        // restarted by MainActivity: Android may refuse it from here if the app was started in the background.
+        if (rebooted) {
+            save(loaded)
+            AlertScheduler.schedule(context.applicationContext, loaded)
+        }
     }
 
     fun selectProfile(context: Context, id: String) = update(context) { it.selectProfile(id) }
@@ -81,10 +89,11 @@ object MatchController {
         putInt("bootCount", bootCount)
     }
 
-    private fun load(): MatchState {
+    /** The saved state, adjusted if the watch has rebooted since, and whether it has. */
+    private fun load(): Pair<MatchState, Boolean> {
         val phase = prefs.getString("phase", null)
             ?.let { name -> Phase.entries.firstOrNull { it.name == name } }
-            ?: return MatchState()
+            ?: return MatchState() to false
         val now = SystemClock.elapsedRealtime()
         val s = MatchState(
             phase = phase,
@@ -110,12 +119,13 @@ object MatchController {
         // BOOT_COUNT can read 0 on some builds; a start time in the future is a reboot regardless.
         val rebooted = prefs.getInt("bootCount", bootCount) != bootCount ||
             s.halfStartedAt > now
-        return when {
+        val adjusted = when {
             !rebooted -> s
             phase == Phase.RUNNING || phase == Phase.PAUSED -> s.newMatch()
             // The first half's result survives a reboot; only the halftime clock has to start over.
             phase == Phase.HALFTIME -> s.copy(halftimeStartedAt = now)
             else -> s
         }
+        return adjusted to rebooted
     }
 }
