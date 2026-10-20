@@ -39,6 +39,7 @@
     <string name="cd_edit_profile">Edit profile</string>
     <string name="cd_new_profile">New profile</string>
     <string name="cd_restore_defaults">Restore default profiles, hold</string>
+    <string name="cd_restore_settings">Restore default settings, hold</string>
     <string name="cd_save">Save</string>
     <string name="cd_delete_profile">Delete profile, hold</string>
     <string name="cd_name">Name</string>

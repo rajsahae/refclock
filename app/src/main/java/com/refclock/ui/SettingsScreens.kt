@@ -2,6 +2,7 @@ package com.refclock.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -42,6 +43,7 @@ import com.refclock.AlertPlayer
 import com.refclock.R
 import com.refclock.SettingsStore
 import com.refclock.match.AlertSlot
+import com.refclock.match.AppSettings
 import com.refclock.match.AlertStyle
 import com.refclock.match.Pattern
 
@@ -89,6 +91,14 @@ internal fun SettingsRoute(onAlert: (AlertSlot) -> Unit) {
                     toggleControl = { Switch(checked = countUp) },
                     modifier = Modifier.fillMaxWidth(),
                 )
+            }
+            item {
+                // Leaves profiles alone: they describe a league's format, settings how you like to be alerted.
+                Box(Modifier.padding(top = 8.dp)) {
+                    HoldButton(R.drawable.ic_restore, stringResource(R.string.cd_restore_settings)) {
+                        SettingsStore.update { AppSettings() }
+                    }
+                }
             }
         }
     }
