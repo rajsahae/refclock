@@ -18,14 +18,27 @@ android {
         versionName = "0.1"
     }
 
+    // The Play upload key. Its location and passwords come from ~/.gradle/gradle.properties, so they
+    // never enter this repo. Without them (say, on someone else's machine) release builds fall back
+    // to the debug key, which Play rejects but a watch will install.
+    val uploadStoreFile = providers.gradleProperty("refclock.upload.storeFile").orNull
+    signingConfigs {
+        if (uploadStoreFile != null) {
+            create("upload") {
+                storeFile = file(uploadStoreFile)
+                storePassword = providers.gradleProperty("refclock.upload.storePassword").get()
+                keyAlias = providers.gradleProperty("refclock.upload.keyAlias").get()
+                keyPassword = providers.gradleProperty("refclock.upload.keyPassword").get()
+            }
+        }
+    }
+
     buildTypes {
         release {
             optimization {
                 enable = true
             }
-            // Until there's an upload key for the Play Store: lets a release build install over a
-            // debug one, keeping its profiles and settings.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("upload") ?: signingConfigs.getByName("debug")
         }
     }
 
